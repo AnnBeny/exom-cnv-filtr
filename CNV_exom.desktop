@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Exom app
+Comment=Launch the CNV Analysis App for Exom
+Exec=D:\exom_analyza\launch.sh
+Icon=D:\exom_analyza\icon_exom.png
+Terminal=false
+Type=Application
+Categories=Development;
