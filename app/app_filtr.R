@@ -22,7 +22,7 @@ ui <- page_sidebar(
     tags$style(HTML("
       .navbar.navbar-static-top {
         background: #007BC2;
-        background: linear-gradient(90deg, rgba(0, 123, 194, 1) 10%, rgba(255, 255, 255, 1) 25%);
+        background: linear-gradient(90deg, rgba(0, 123, 194, 1) 20%, rgba(234, 203, 215, 1) 90%);
       }
       .navbar-brand {
         color: #ffffff !important;
@@ -79,12 +79,6 @@ ui <- page_sidebar(
       .input-group .btn {
         border-radius: 8px 8px 0px 0px !important;
       }
-      .gene-filter-block .selectize-input {
-        border: 1px solid #ced4da;
-        border-radius: 0px 0px 8px 8px !important;
-        max-height: 200px;
-        overflow-y: auto;
-      }
       .gender-row {
         display: flex;
         align-items: center;
@@ -92,7 +86,7 @@ ui <- page_sidebar(
         gap: 10px;
       }
       .gender-label {
-        width: 200px;
+        width: 300px;
         text-align: right;
         padding-bottom: 0px;
       }
@@ -119,6 +113,34 @@ ui <- page_sidebar(
         background-color: white;
         full_screen = TRUE;
       }
+      .submit-task-button {
+        text-align: left; 
+        margin-top: 10px;
+        margin-left: 190px;
+        margin-bottom: 20px;
+      }
+      .submit-task-button .btn {
+        width: 200px; 
+        font-size: 16px; 
+        padding: 10px; 
+        background-color: #008871; 
+        border: none; 
+        border-radius: 8px;
+      }
+
+      .form-check .form-check-input {
+        float: right;
+        align-items: center;
+      }
+      .form-check {
+        align-items: center;
+        margin-bottom: 0px;
+      }
+      .form-check .form-check-label {
+        font-size: 16px;
+        padding-right: 35px;
+        align-items: center;
+      }
       h5 {
         margin-top: 0px;
         margin-bottom: 10px;
@@ -131,25 +153,18 @@ ui <- page_sidebar(
         margin-bottom: 5px;
         border: 1px solid #ccc;
       }
-      .submit-task-button {
-        text-align: left; 
-        margin-left: 90px; 
-        margin-top: 20px;
-      }
-      .submit-task-button .btn {
-        width: 200px; 
-        font-size: 16px; 
-        padding: 10px; 
-        background-color: #008871; 
-        border: none; 
-        border-radius: 8px;
-      }
       .gene-filter-block {
         margin-top: 10px;
         margin-bottom: 20px;
       }
       .gene-filter-block .form-group {
         margin-bottom: 0px;
+      }
+      .gene-filter-block .selectize-input {
+        border: 1px solid #ced4da;
+        border-radius: 0px 0px 8px 8px !important;
+        max-height: 200px;
+        overflow-y: auto;
       }
       .gene-filter-block p {
         margin-top: 0px;
@@ -162,7 +177,7 @@ ui <- page_sidebar(
         padding: 10px; 
         background-color: #B9547B; 
         border: none; 
-        border-radius: 8px 8px 0px 0px !important;
+        border-radius: 8px 8px 8px 8px;
       }
       .gene-filter-block .btn-secondary {
         background-color: #A03E5B;
@@ -216,6 +231,8 @@ ui <- page_sidebar(
       nav_panel("Coverage  Mean ALL", DT::dataTableOutput("coverage_table")), # nolint
       nav_panel("CNV Muži Mean", DT::dataTableOutput("cnv_m")), # nolint
       nav_panel("CNV Ženy Mean", DT::dataTableOutput("cnv_z")), # nolint
+      nav_spacer(),
+      nav_item(align = c("right"), input_switch("switch_on", label = "Filtr", value = FALSE, width = NULL)), # nolint
       # nav_panel()
       #nav_panel("Coverage Procenta ALL", DT::dataTableOutput("coverage_table_proc")), # nolint
       #nav_panel("CNV Muži Procenta", DT::dataTableOutput("cnv_m_proc")), # nolint
@@ -278,13 +295,18 @@ server <- function(input, output, session) {
     })
   })
 
+  # Reactive values to store data and processing status
   final_data <- reactiveVal()
   final_data_proc <- reactiveVal()
+  final_data_proc_original <- reactiveVal()
+  final_data_original <- reactiveVal()
   pohlavi_data <- reactiveVal()
   cnv_m_data <- reactiveVal()
   cnv_z_data <- reactiveVal()
   cnv_m_data_proc <- reactiveVal()
   cnv_z_data_proc <- reactiveVal()
+  cnv_m_data_original <- reactiveVal()
+  cnv_z_data_original <- reactiveVal()
   submit_status <- reactiveVal("ready")
   regions_data <- reactiveVal(NULL)
 
@@ -301,7 +323,6 @@ server <- function(input, output, session) {
   output$action_button <- renderUI({
     req(input$file)
     div(class = "submit-task-button",
-      style = "text-align: left; margin-left: 90px; margin-top: 20px;",
       input_task_button(
         "submit",
         label = "Zpracovat",
@@ -335,7 +356,7 @@ server <- function(input, output, session) {
             "submit_filtr",
             label = "Použít filtr",
             disabled = TRUE,
-            style = "pointer-events: none; opacity: 0.5;"
+            style = "pointer-events: none; opacity: 0.5; border-radius: 8px 8px 0px 0px;"
           ),
           selectizeInput(
             inputId = "regions",
@@ -348,7 +369,7 @@ server <- function(input, output, session) {
           input_task_button(
             "reset_filtr",
             label = "Obnovit vše",
-            class = "btn-secondary",
+            style = "pointer-events: none; opacity: 0.5; border-radius: 8px 8px 8px 8px;"
           ),
           helpText("Uvedené geny budou vybrány do analýzy. Pokud výběr necháte prázdný, budou zahrnuty všechny oblasti.") # nolint
         )
@@ -360,6 +381,7 @@ server <- function(input, output, session) {
           input_task_button(
             "submit_filtr",
             label = "Použít filtr",
+            style = "border-radius: 8px 8px 0px 0px;"
           ),
           selectizeInput(
             inputId = "regions",
@@ -372,7 +394,7 @@ server <- function(input, output, session) {
           input_task_button(
             "reset_filtr",
             label = "Obnovit vše",
-            class = "btn-secondary",
+            style = "border-radius: 8px 8px 8px 8px;"
           ),
           helpText("Uvedené geny budou vybrány do analýzy. Pokud výběr necháte prázdný, budou zahrnuty všechny oblasti.") # nolint
         )
@@ -493,14 +515,16 @@ server <- function(input, output, session) {
       }
 
       final_data(combined)
+      final_data_original(combined)
       final_data_proc(combined_proc)
+      final_data_proc_original(combined_proc)
 
       # Step 3: CNV detection
       incProgress(0.6, detail = "Normalizace CNV M...")
 
       # CNV logic
-      coverage <- final_data()
-      coverage_proc <- final_data_proc()
+      coverage <- final_data_original()
+      coverage_proc <- final_data_proc_original()
       pohlavi <- pohlavi_data()
       #row_id <- seq.int(nrow(coverage)) # nolint
       m <- colnames(coverage)[grepl("^M_", colnames(coverage))]
@@ -529,7 +553,8 @@ server <- function(input, output, session) {
         greater_m <- coverage_m_final[rowSums(m_values, na.rm = TRUE) > 0, ]
         greater_m <- annotate_with_omim(greater_m, omimgeny)
         cnv_m_data(greater_m)
-        write.csv(greater_m, "../data_output/greater_m.csv", row.names = FALSE) # nolint)
+        # write.csv(greater_m, "../data_output/greater_m.csv", row.names = FALSE) # nolint)
+        cnv_m_data_original(greater_m)
 
         cat("greater_m \n")
         print(head(greater_m, 5))
@@ -569,6 +594,8 @@ server <- function(input, output, session) {
         greater_z <- coverage_z_final[rowSums(z_values, na.rm = TRUE) > 0, ]
         greater_z <- annotate_with_omim(greater_z, omimgeny)
         cnv_z_data(greater_z)
+        cnv_z_data_original(greater_z)
+        # write.csv(greater_z, "../data_output/greater_z.csv", row.names = FALSE) # nolint
 
         # PERCENTAGE
         cnv_z_data_proc(cbind(coverage_proc[, c(1:5)], coverage_proc[, z_p, drop = FALSE])) # nolint
@@ -588,22 +615,46 @@ server <- function(input, output, session) {
 
   # when filter button is clicked, update the tables based on selected regions
   observeEvent(input$submit_filtr, {
-    req(final_data())
+    req(final_data_original())
     selected_names <- regions()
     if (!is.null(selected_names) && length(selected_names) > 0) {
-      pattern <- paste0("\\b(", paste(selected_names, collapse = "|"), ")[A-Za0-9_]*\\b") # nolint
-      filtered_data <- final_data()[grepl(pattern, final_data()$name), ]
+      pattern <- paste0("\\b(", paste(selected_names, collapse = "|"), ")[A-Za-z0-9_]*\\b") # nolint
+      filtered_data <- final_data_original()[grepl(pattern, final_data_original()$name), ]
       final_data(filtered_data)
       # update CNV tables as well
-      if (!is.null(cnv_m_data())) {
-        filtered_cnv_m <- cnv_m_data()[grepl(pattern, cnv_m_data()$name), ]
+      if (!is.null(cnv_m_data_original())) {
+        filtered_cnv_m <- cnv_m_data_original()[grepl(pattern, cnv_m_data_original()$name), ]
         cnv_m_data(filtered_cnv_m)
       }
-      if (!is.null(cnv_z_data())) {
-        filtered_cnv_z <- cnv_z_data()[grepl(pattern, cnv_z_data()$name), ]
+      if (!is.null(cnv_z_data_original())) {
+        filtered_cnv_z <- cnv_z_data_original()[grepl(pattern, cnv_z_data_original()$name), ]
         cnv_z_data(filtered_cnv_z)
       }
+      bslib::update_switch("switch_on", value = TRUE, session = session)
+    } else {
+      final_data(final_data_original())
+      if (!is.null(cnv_m_data_original())) {
+        cnv_m_data(cnv_m_data_original())
+      }
+      if (!is.null(cnv_z_data_original())) {
+        cnv_z_data(cnv_z_data_original())
+      }
+      bslib::update_switch("switch_on", value = FALSE, session = session)
     }
+  })
+
+  # when reset button is clicked, reset the tables to original data
+  observeEvent(input$reset_filtr, {
+    req(final_data_original())
+    final_data(final_data_original())
+    if (!is.null(cnv_m_data_original())) {
+      cnv_m_data(cnv_m_data_original())
+    }
+    if (!is.null(cnv_z_data_original())) {
+      cnv_z_data(cnv_z_data_original())
+    }
+    updateSelectizeInput(session, "regions", selected = character(0))
+    bslib::update_switch("switch_on", value = FALSE, session = session)
   })
 
   # Tables
@@ -681,8 +732,8 @@ server <- function(input, output, session) {
   # coverage data in percentages
   # This table displays percent coverage values before normalization.
   output$coverage_table_proc <- DT::renderDataTable({
-    req(final_data_proc())
-    df <- final_data_proc()
+    req(final_data_proc_original())
+    df <- final_data_proc_original()
     validate(need(nrow(df) > 0, "Žádná data pro procenta pokrytí"))
     DT::datatable(
       df,
