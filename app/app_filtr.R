@@ -130,11 +130,15 @@ ui <- page_sidebar(
         border: none;
         border-radius: 8px;
       }
-      .input-group,
+      .input-group {
+        margin-bottom: 0px;
+        padding: 0px;
+      }
       .input-group-prepend {
         width: 100% !important;
         padding-top: 0px !important;
         margin-top: 0px;
+        margin-bottom: 0px;
         border-top-left-radius: 8px;
         border-top-right-radius: 8px;
       }
@@ -220,7 +224,7 @@ ui <- page_sidebar(
       }
       .gene-filter-block {
         margin-top: 10px;
-        margin-bottom: 20px;
+        margin-bottom: 10px;
       }
       .gene-filter-block .form-group {
         margin-bottom: 0px;
@@ -247,6 +251,10 @@ ui <- page_sidebar(
       .gene-filter-block .btn-secondary {
         background-color: #A03E5B;
       }
+      .download-buttons-group {
+        margin-top: 15px;
+        margin-bottom: 15px;
+      }
       .download-buttons {
         margin-bottom: 0px;
         gap: 0px;
@@ -270,12 +278,20 @@ ui <- page_sidebar(
       width = "100%"
     ),
 
+    tags$hr(),
+
     # h4("Filtr oblastí hg38", style = "margin-top: 30px; font-weight: bold;"), # nolint
     uiOutput("regions_selector"),
+    uiOutput("warn_text"),
 
-    downloadButton("downloadCoveragemean", "Cov Mean ALL", class = "btn-lg btn-primary"), # nolint
-    downloadButton("downloadCNVMmean", "CNV M Mean", class = "btn-lg btn-primary"), # nolint
-    downloadButton("downloadCNVZmean", "CNV Z Mean", class = "btn-lg btn-primary"), # nolint
+    tags$hr(),
+
+    div(
+      class = "download-buttons-group",
+      downloadButton("downloadCoveragemean", "Cov Mean ALL", class = "btn-lg btn-primary"), # nolint
+      downloadButton("downloadCNVMmean", "CNV M Mean", class = "btn-lg btn-primary"), # nolint
+      downloadButton("downloadCNVZmean", "CNV Z Mean", class = "btn-lg btn-primary"), # nolint
+    ),
 
     #downloadButton("downloadCoverageproc", "Cov Procenta ALL", class = "btn-lg btn-primary"), # nolint
     #downloadButton("downloadCNVMproc", "CNV M Procenta", class = "btn-lg btn-primary"), # nolint
@@ -702,43 +718,77 @@ server <- function(input, output, session) {
 
 ###################################FILTR
 
-print(regions)
-
   # when filter button is clicked, update the tables based on selected regions
   observeEvent(input$submit_filtr, {
     req(final_data_original())
+
     selected_names <- regions()
-    if (!is.null(selected_names) && length(selected_names) > 0) {
-      pattern <- paste0("\\b(", paste(selected_names, collapse = "|"), ")\\b")
-      filtered_data <- final_data_original() %>%
-        dplyr::filter(stringr::str_detect(name, pattern))
-      final_data(filtered_data)
-      if (!is.null(cnv_m_data_original())) {
-        filtered_cnv_m <- cnv_m_data_original() %>%
-          dplyr::filter(stringr::str_detect(name, pattern))
-        cnv_m_data(filtered_cnv_m)
-      }
-      if (!is.null(cnv_z_data_original())) {
-        filtered_cnv_z <- cnv_z_data_original() %>%
-          dplyr::filter(stringr::str_detect(name, pattern))
-        cnv_z_data(filtered_cnv_z)
-      }
-      bslib::update_switch("switch_on", value = TRUE, session = session)
-    } else {
+    selected_names <- trimws(as.character(selected_names))
+    selected_names <- selected_names[selected_names != ""]
+
+    if (length(selected_names) == 0) {
       final_data(final_data_original())
+
       if (!is.null(cnv_m_data_original())) {
         cnv_m_data(cnv_m_data_original())
       }
       if (!is.null(cnv_z_data_original())) {
         cnv_z_data(cnv_z_data_original())
       }
+
+      showNotification("Nejsou vybrány žádné geny", type = "warning")
+
       bslib::update_switch("switch_on", value = FALSE, session = session)
+
+      cat("No genes selected\n")
+
+      return(NULL)
     }
+
+    pattern <- paste0("\\b(", paste(selected_names, collapse = "|"), ")\\b")
+
+    filtered_data <- final_data_original() %>%
+      dplyr::filter(stringr::str_detect(name, pattern))
+
+    final_data(filtered_data)
+
+    if (!is.null(cnv_m_data_original())) {
+      filtered_cnv_m <- cnv_m_data_original() %>%
+        dplyr::filter(stringr::str_detect(name, pattern))
+      cnv_m_data(filtered_cnv_m)
+    }
+
+    if (!is.null(cnv_z_data_original())) {
+      filtered_cnv_z <- cnv_z_data_original() %>%
+        dplyr::filter(stringr::str_detect(name, pattern))
+      cnv_z_data(filtered_cnv_z)
+    }
+
+    bslib::update_switch("switch_on", value = TRUE, session = session)
+
+    cat("---genes for filter--- \n")
+    print(head(filtered_data, 10))
   })
+
+  # } else {
+  #   final_data(final_data_original())
+  #   if (!is.null(cnv_m_data_original())) {
+  #     cnv_m_data(cnv_m_data_original())
+  #   }
+
+  #   if (!is.null(cnv_z_data_original())) {
+  #     cnv_z_data(cnv_z_data_original())
+  #   }
+  #   bslib::update_switch("switch_on", value = FALSE, session = session)
+
+  #   cat("---genes for filter--- \n")
+  #   print(filtered_data)
+  # })
 
   # when reset button is clicked, reset the tables to original data
   observeEvent(input$reset_filtr, {
     req(final_data_original())
+
     final_data(final_data_original())
     if (!is.null(cnv_m_data_original())) {
       cnv_m_data(cnv_m_data_original())
@@ -746,8 +796,61 @@ print(regions)
     if (!is.null(cnv_z_data_original())) {
       cnv_z_data(cnv_z_data_original())
     }
-    updateSelectizeInput(session, "regions", selected = character(0))
+
+    updateSelectizeInput(session, "selected_names", selected = character(0))
     bslib::update_switch("switch_on", value = FALSE, session = session)
+
+    cat("---genes for filter--- \n")
+    print("no genes for filter \n")
+  })
+
+  # compare with genes from hg19 and hg38
+  # df_unique_genes <- lapply(input$file$datapath, function(path) {
+  #   read.delim(path, check.names = FALSE)
+  # })
+
+  output$warn_text <- renderUI({
+    selected_genes <- regions()
+    req(selected_genes)
+
+    df_unique_genes <- read.delim(
+      "../unique_hg19_hg38.txt",
+      header = FALSE,
+      stringsAsFactors = FALSE
+    )
+
+    col1 <- trimws(as.character(df_unique_genes[[1]]))
+    col2 <- trimws(as.character(selected_genes))
+
+    cat("---col1--- \n")
+    print(head(col1, 5))
+    cat("---col2--- \n")
+    print(head(col2, 5))
+
+    notInHG <- setdiff(col2, col1)
+
+    cat("---notInHG--- \n")
+    print(head(notInHG, 5))
+
+
+    if (length(col2) == 0) {
+      return(NULL)
+    }
+
+    if (length(notInHG) > 0) {
+      div(
+        style = "color: #A03E5B;",
+        paste(
+          "Tyto geny nejsou v referenčním seznamu hg37 a hg38:",
+          paste(sort(notInHG), collapse = ", ")
+        )
+      )
+    } else {
+      div(
+        style = "color: #008871;",
+        "Všechny zadané geny jsou v referenčním seznamu hg37 a hg38."
+      )
+    }
   })
 
   # Tables
