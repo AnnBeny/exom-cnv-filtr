@@ -1,6 +1,7 @@
 library(shiny)
 library(bslib)
 library(magrittr)
+library(stringr)
 library(DT)
 options(shiny.maxRequestSize = 30 * 1024^2) # max 30 MB
 
@@ -17,7 +18,36 @@ ui <- page_sidebar(
   bg = "#fafafac7",
 
   tags$head(
-    tags$script(HTML("document.title = 'Exom Analýza a filtr genů';")),
+
+    tags$script(HTML("
+      document.addEventListener('DOMContentLoaded', function() {
+        document.title = 'Exom Analýza a filtr genů';
+        const handle = document.querySelector('.resize-handle');
+        const box = document.querySelector('.resizable-card');
+
+        if (!handle || !box) return;
+
+        let startY, startHeight;
+
+        handle.addEventListener('mousedown', function(e) => {
+          startY = e.clientY;
+          startHeight = box.offsetHeight;
+
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', stopMove);
+        });
+
+        function onMove(e) {
+          const newHeight = startHeight + (e.clientY - startY);
+          box.style.height = newHeight + 'px';
+        }
+
+        function stopMove() {
+          document.removeEventListener('mousemove, onMove);
+          document.removeEventListener('mouseup', stopMove);
+        }
+      });
+    ")),
 
     tags$style(HTML("
       .navbar.navbar-static-top {
@@ -35,6 +65,42 @@ ui <- page_sidebar(
         border-radius: 0px;
         box-shadow: 0 0.085rem 0.20rem rgba(0, 0, 0, 0.150);
         --bslib-spacer: 0.5rem;
+      }
+      .card-container {
+        position: relative;
+        width: 100%;
+      }
+      .resizable-card {
+        min-height: 300px;
+        overflow: auto;
+      }
+      .resizable-card .card-body {
+        height: 100%;
+        overflow: auto;
+      }
+      .resize-handle {
+        position: relative;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        cursor: ns-resize;
+        width: 40px;
+        height: 6px;
+        background: #ccc;
+        border-radius: 3px;
+      }
+      .resize-vertical-card{
+        resize: vertical; 
+        overflow: auto; 
+        height: 300px; 
+        box-shadow: 0 0.085rem 0.20rem rgba(0, 0, 0, 0.150);
+        border-radius: 0.5rem;
+        background-color: white;
+        margin-bottom: 0px;
+      }
+      .resize-vertical-card .card {
+        box-shadow: none !important;
+        border: none !important;
       }
       .btn-file {
         font-size: 16px;
@@ -103,15 +169,12 @@ ui <- page_sidebar(
         justify-content: center;
       }
       .info-gender-card {
-        margin-top: -20px;
         margin-bottom: 0px;
         overflow: auto;
-        resize: vertical; 
         box-shadow: 0 0.085rem 0.20rem rgba(0, 0, 0, 0.150);
         border-radius: 0.5rem;
         padding: 1rem;
         background-color: white;
-        full_screen = TRUE;
       }
       .submit-task-button {
         text-align: left; 
@@ -127,19 +190,21 @@ ui <- page_sidebar(
         border: none; 
         border-radius: 8px;
       }
-
       .form-check .form-check-input {
         float: right;
         align-items: center;
+        cursor: none;
       }
       .form-check {
         align-items: center;
         margin-bottom: 0px;
+        cursor: none;
       }
       .form-check .form-check-label {
         font-size: 16px;
         padding-right: 35px;
         align-items: center;
+        cursor: default;
       }
       h5 {
         margin-top: 0px;
@@ -202,7 +267,7 @@ ui <- page_sidebar(
       accept = ".txt",
       buttonLabel = "Vybrat soubory",
       placeholder = "Nevybrán žádný soubor",
-      width = "100%",
+      width = "100%"
     ),
 
     # h4("Filtr oblastí hg38", style = "margin-top: 30px; font-weight: bold;"), # nolint
@@ -223,22 +288,44 @@ ui <- page_sidebar(
     )
   ),
 
-  uiOutput("info_panel"),
-  uiOutput("panel_karta"),
+  # div(
+  #   class = "card-container",
+  #   card(
+  #     class = "resizable-card",
+  #     uiOutput("info_panel"),
+  #     uiOutput("panel_karta"),
+  #   )
+  # ),
+  # div(class = "resize-handle"),
 
-  card(
-    navset_card_tab(
-      nav_panel("Coverage  Mean ALL", DT::dataTableOutput("coverage_table")), # nolint
-      nav_panel("CNV Muži Mean", DT::dataTableOutput("cnv_m")), # nolint
-      nav_panel("CNV Ženy Mean", DT::dataTableOutput("cnv_z")), # nolint
-      nav_spacer(),
-      nav_item(align = c("right"), input_switch("switch_on", label = "Filtr", value = FALSE, width = NULL)), # nolint
-      # nav_panel()
-      #nav_panel("Coverage Procenta ALL", DT::dataTableOutput("coverage_table_proc")), # nolint
-      #nav_panel("CNV Muži Procenta", DT::dataTableOutput("cnv_m_proc")), # nolint
-      #nav_panel("CNV Ženy Procenta", DT::dataTableOutput("cnv_z_proc")) # nolint
-    )
-  )
+  div(
+    # class = "card-container",
+  #   card(
+      class = "resize-vertical-card",
+      uiOutput("info_panel"),
+      uiOutput("panel_karta")
+    # )
+  ),
+  # div(class = "resize-handle"),
+
+  # div(
+  #   class = "card-container",
+  #   card(
+  #     class = "resizable-card",
+      navset_card_tab(
+        nav_panel("Coverage  Mean ALL", DT::dataTableOutput("coverage_table")), # nolint
+        nav_panel("CNV Muži Mean", DT::dataTableOutput("cnv_m")), # nolint
+        nav_panel("CNV Ženy Mean", DT::dataTableOutput("cnv_z")), # nolint
+        nav_spacer(),
+        nav_item(align = c("right"), input_switch("switch_on", label = "Filtr", value = FALSE, width = NULL)) # nolint
+        # nav_panel()
+        #nav_panel("Coverage Procenta ALL", DT::dataTableOutput("coverage_table_proc")), # nolint
+        #nav_panel("CNV Muži Procenta", DT::dataTableOutput("cnv_m_proc")), # nolint
+        #nav_panel("CNV Ženy Procenta", DT::dataTableOutput("cnv_z_proc")) # nolint
+      )
+  #   )
+  # ),
+  # div(class = "resize-handle")
 )
 
 ######################################################################################################################## # nolint
@@ -256,7 +343,7 @@ server <- function(input, output, session) {
           tags$p("Po zpracování se zobrazí výsledky v jednotlivých záložkách."), # nolint
           tags$p("V případě problémů s nahráváním souborů zkontrolujte, zda jsou ve správném formátu a nepřesahují velikost 30 MB."), # nolint
           tags$p("Pro vyfiltrování požadovaných genů vyplňte pole pro filtr na bočním panelu.") # nolint
-        ),
+        )
       )
     } else {
       NULL
@@ -311,7 +398,7 @@ server <- function(input, output, session) {
   regions_data <- reactiveVal(NULL)
 
   regions <- reactive({
-    selected_regions <- Filter(function(x) x != "", input$regions)
+    selected_regions <- Filter(function(x) "x" != "", input$regions)
     if (length(selected_regions) == 0) {
       return(NULL)
     } else {
@@ -345,7 +432,7 @@ server <- function(input, output, session) {
     # disabled = submit_status() == "processing"
   })
 
-  # regions selector - allows to select regions to be excluded from CNV analysis
+  # filter genes - buttons, choices
   output$regions_selector <- renderUI({
     div(class = "gene-filter-block",
       #if (is.null(input$file) || is.null(regions_data())) {
@@ -613,21 +700,27 @@ server <- function(input, output, session) {
     submit_status("ready")
   })
 
+###################################FILTR
+
+print(regions)
+
   # when filter button is clicked, update the tables based on selected regions
   observeEvent(input$submit_filtr, {
     req(final_data_original())
     selected_names <- regions()
     if (!is.null(selected_names) && length(selected_names) > 0) {
-      pattern <- paste0("\\b(", paste(selected_names, collapse = "|"), ")[A-Za-z0-9_]*\\b") # nolint
-      filtered_data <- final_data_original()[grepl(pattern, final_data_original()$name), ]
+      pattern <- paste0("\\b(", paste(selected_names, collapse = "|"), ")\\b")
+      filtered_data <- final_data_original() %>%
+        dplyr::filter(stringr::str_detect(name, pattern))
       final_data(filtered_data)
-      # update CNV tables as well
       if (!is.null(cnv_m_data_original())) {
-        filtered_cnv_m <- cnv_m_data_original()[grepl(pattern, cnv_m_data_original()$name), ]
+        filtered_cnv_m <- cnv_m_data_original() %>%
+          dplyr::filter(stringr::str_detect(name, pattern))
         cnv_m_data(filtered_cnv_m)
       }
       if (!is.null(cnv_z_data_original())) {
-        filtered_cnv_z <- cnv_z_data_original()[grepl(pattern, cnv_z_data_original()$name), ]
+        filtered_cnv_z <- cnv_z_data_original() %>%
+          dplyr::filter(stringr::str_detect(name, pattern))
         cnv_z_data(filtered_cnv_z)
       }
       bslib::update_switch("switch_on", value = TRUE, session = session)
