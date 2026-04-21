@@ -64,7 +64,7 @@ ui <- page_sidebar(
         padding: 0px;
         border-radius: 0px;
         box-shadow: 0 0.085rem 0.20rem rgba(0, 0, 0, 0.150);
-        --bslib-spacer: 0.5rem;
+        --bslib-spacer: 0.2rem;
       }
       .card-container {
         position: relative;
@@ -285,14 +285,11 @@ ui <- page_sidebar(
     uiOutput("warn_text"),
 
     tags$hr(),
-
-    div(
-      class = "download-buttons-group",
-      downloadButton("downloadCoveragemean", "Cov Mean ALL", class = "btn-lg btn-primary"), # nolint
-      downloadButton("downloadCNVMmean", "CNV M Mean", class = "btn-lg btn-primary"), # nolint
-      downloadButton("downloadCNVZmean", "CNV Z Mean", class = "btn-lg btn-primary"), # nolint
-    ),
-
+    tags$br(),
+    downloadButton("downloadCoveragemean", "Cov Mean vše", class = "btn-lg btn-primary"), # nolint
+    downloadButton("downloadCNVMmean", "CNV Mean muži", class = "btn-lg btn-primary"), # nolint
+    downloadButton("downloadCNVZmean", "CNV Mean ženy", class = "btn-lg btn-primary"), # nolint
+    tags$br(),
     #downloadButton("downloadCoverageproc", "Cov Procenta ALL", class = "btn-lg btn-primary"), # nolint
     #downloadButton("downloadCNVMproc", "CNV M Procenta", class = "btn-lg btn-primary"), # nolint
     #downloadButton("downloadCNVZproc", "CNV Z Procenta", class = "btn-lg btn-primary"), # nolint
