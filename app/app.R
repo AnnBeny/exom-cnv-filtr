@@ -1,92 +1,295 @@
 library(shiny)
 library(bslib)
 library(magrittr)
+library(stringr)
 library(DT)
 options(shiny.maxRequestSize = 30 * 1024^2) # max 30 MB
 
 # Load helper functions
 source("helpers.R")
 
+# Filter
+filter_regions <- c()
+
 # UI
 ui <- page_sidebar(
-  title = "Exom Analýza",
+  title = "Exom Analýza a filtr genů",
 
   bg = "#fafafac7",
 
   tags$head(
-    tags$script(HTML("document.title = 'Exom Analýza';")),
+
+    tags$script(HTML("
+      document.addEventListener('DOMContentLoaded', function() {
+        document.title = 'Exom Analýza a filtr genů';
+        const handle = document.querySelector('.resize-handle');
+        const box = document.querySelector('.resizable-card');
+
+        if (!handle || !box) return;
+
+        let startY, startHeight;
+
+        handle.addEventListener('mousedown', function(e) => {
+          startY = e.clientY;
+          startHeight = box.offsetHeight;
+
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', stopMove);
+        });
+
+        function onMove(e) {
+          const newHeight = startHeight + (e.clientY - startY);
+          box.style.height = newHeight + 'px';
+        }
+
+        function stopMove() {
+          document.removeEventListener('mousemove, onMove);
+          document.removeEventListener('mouseup', stopMove);
+        }
+      });
+    ")),
+
     tags$style(HTML("
       .navbar.navbar-static-top {
         background: #007BC2;
-        background: linear-gradient(90deg, rgba(0, 123, 194, 1) 0%, rgba(255, 255, 255, 1) 25%); # nolint
+        background: linear-gradient(90deg, rgba(0, 123, 194, 1) 20%, rgba(234, 203, 215, 1) 90%);
       }
       .navbar-brand {
         color: #ffffff !important;
         font-weight: 700 !important;
-        font-size: 26px !importnat;
+        font-size: 24px !important;
       }
-      .navbar.navbar-static-top {
-        background: #007BC2;
-        background: linear-gradient(90deg,rgba(0, 123, 194, 1) 0%, rgba(255, 255, 255, 1) 25%); # nolint
+      .sidebar {
+        background-color: #f8f9fa;
+        padding: 0px;
+        border-radius: 0px;
+        box-shadow: 0 0.085rem 0.20rem rgba(0, 0, 0, 0.150);
+        --bslib-spacer: 0.2rem;
       }
-      .navbar-brand {
-        color: #ffffff !important;
-        font-weight: 700 !important;
+      .card-container {
+        position: relative;
+        width: 100%;
+      }
+      .resizable-card {
+        min-height: 300px;
+        overflow: auto;
+      }
+      .resizable-card .card-body {
+        height: 100%;
+        overflow: auto;
+      }
+      .resize-handle {
+        position: relative;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        cursor: ns-resize;
+        width: 40px;
+        height: 6px;
+        background: #ccc;
+        border-radius: 3px;
+      }
+      .resize-vertical-card{
+        resize: vertical; 
+        overflow: auto; 
+        height: 300px; 
+        box-shadow: 0 0.085rem 0.20rem rgba(0, 0, 0, 0.150);
+        border-radius: 0.5rem;
+        background-color: white;
+        margin-bottom: 0px;
+      }
+      .resize-vertical-card .card {
+        box-shadow: none !important;
+        border: none !important;
       }
       .btn-file {
         font-size: 16px;
+        font-weight: bold;
         width: 100%;
+        background-color: #B9547B;
+        color: white;
+        border: none;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
       }
       .btn-file:hover {
         font-size: 16px;
       }
-      .input-group,
+      .form-control {
+        font-size: 16px;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #ced4da;
+      }
+      .btn-primary {
+        font-size: 16px;
+        font-weight: bold;
+        width: 100%;
+        background-color: #007BC2;
+        color: white;
+        border: none;
+        border-radius: 8px;
+      }
+      .input-group {
+        margin-bottom: 0px;
+        padding: 0px;
+      }
       .input-group-prepend {
         width: 100% !important;
         padding-top: 0px !important;
         margin-top: 0px;
+        margin-bottom: 0px;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+      }
+      .input-group .form-control {
+        border-radius: 0px 0px 8px 8px !important;
+        margin-left: 0px !important;
+      }
+      .input-group .btn {
+        border-radius: 8px 8px 0px 0px !important;
       }
       .gender-row {
         display: flex;
         align-items: center;
-        gap: 0 !important; 
         margin-bottom: 5px;
-        padding: 0;
+        gap: 10px;
       }
       .gender-label {
-        width: 120px;
+        width: 300px;
+        text-align: right;
+        padding-bottom: 0px;
       }
       .gender-select .form-group {
-        margin: 0;
-        width: 80px;
+        margin-bottom: 0px;
       }
-      .card-body.bslib-gap-spacing {
-        gap: 0 !important;
+      .gender-select .form-group .selectize-input {
+        border: 1px solid #ced4da;
+        border-radius: 8px !important;
+        font-size: 16px;
+      }
+      .action-button-container {
+        display: flex;
+        justify-content: center;
+      }
+      .info-gender-card {
+        margin-bottom: 0px;
+        overflow: auto;
+        box-shadow: 0 0.085rem 0.20rem rgba(0, 0, 0, 0.150);
+        border-radius: 0.5rem;
+        padding: 1rem;
+        background-color: white;
+      }
+      .submit-task-button {
+        text-align: left; 
+        margin-top: 10px;
+        margin-left: 190px;
+        margin-bottom: 20px;
+      }
+      .submit-task-button .btn {
+        width: 200px; 
+        font-size: 16px; 
+        padding: 10px; 
+        background-color: #008871; 
+        border: none; 
+        border-radius: 8px;
+      }
+      .form-check .form-check-input {
+        float: right;
+        align-items: center;
+        cursor: none;
+      }
+      .form-check {
+        align-items: center;
+        margin-bottom: 0px;
+        cursor: none;
+      }
+      .form-check .form-check-label {
+        font-size: 16px;
+        padding-right: 35px;
+        align-items: center;
+        cursor: default;
+      }
+      h5 {
+        margin-top: 0px;
+        margin-bottom: 10px;
+        color: #007BC2; 
+        font-weight: bold; 
+        font-size: 18px; 
       }
       hr {
         margin-top: 5px;
         margin-bottom: 5px;
         border: 1px solid #ccc;
       }
+      .gene-filter-block {
+        margin-top: 10px;
+        margin-bottom: 10px;
+      }
+      .gene-filter-block .form-group {
+        margin-bottom: 0px;
+      }
+      .gene-filter-block .selectize-input {
+        border: 1px solid #ced4da;
+        border-radius: 0px 0px 8px 8px !important;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+      .gene-filter-block p {
+        margin-top: 0px;
+        margin-bottom: 5px;
+      }
+      .gene-filter-block .btn {
+        margin-bottom: 0px; 
+        width: 100%; 
+        font-size: 16px; 
+        padding: 10px; 
+        background-color: #B9547B; 
+        border: none; 
+        border-radius: 8px 8px 8px 8px;
+      }
+      .gene-filter-block .btn-secondary {
+        background-color: #A03E5B;
+      }
+      .download-buttons-group {
+        margin-top: 15px;
+        margin-bottom: 15px;
+      }
+      .download-buttons {
+        margin-bottom: 0px;
+        gap: 0px;
+      }
+      .download-buttons .form-group {
+        margin-bottom: 0px;
+        gap: 0px;
+      }
     "))
   ),
 
   sidebar = sidebar(
-    tags$h5(textOutput("text"), style = "color: #007BC2; font-weight: bold; font-size: 20px; margin-top: 10px"), # nolint
-    fileInput("file", NULL, multiple = TRUE, accept = ".txt", buttonLabel = "Vybrat soubory", # nolint
-              placeholder = "Nevybrán žádný soubor", width = "100%"),
-    tags$style("
-      .btn-file { font-size: 16px; }
-      .btn-file:hover { font-size: 16px; }
-      .btn-file { width: 100%; }
-      .input-group { width: 100% !important; margin-top: 0px; padding-top: 0px !important; } # nolint
-      .input-group-prepend { width: 100% !important; padding-top: 0px !important; } # nolint
-    "),
-    downloadButton("downloadCoveragemean", "Cov Mean ALL", class = "btn-lg btn-primary"), # nolint
-    downloadButton("downloadCNVMmean", "CNV M Mean", class = "btn-lg btn-primary"), # nolint
-    downloadButton("downloadCNVZmean", "CNV Z Mean", class = "btn-lg btn-primary"), # nolint
+    # tags$h5(textOutput("text"), style = "color: #007BC2; font-weight: bold; font-size: 20px; margin-top: 10px"), # nolint
+    fileInput(
+      "file",
+      NULL,
+      multiple = TRUE,
+      accept = ".txt",
+      buttonLabel = "Vybrat soubory",
+      placeholder = "Nevybrán žádný soubor",
+      width = "100%"
+    ),
+
     tags$hr(),
 
+    # h4("Filtr oblastí hg38", style = "margin-top: 30px; font-weight: bold;"), # nolint
+    uiOutput("regions_selector"),
+    uiOutput("warn_text"),
+
+    tags$hr(),
+    tags$br(),
+    downloadButton("downloadCoveragemean", "Cov Mean vše", class = "btn-lg btn-primary"), # nolint
+    downloadButton("downloadCNVMmean", "CNV Mean muži", class = "btn-lg btn-primary"), # nolint
+    downloadButton("downloadCNVZmean", "CNV Mean ženy", class = "btn-lg btn-primary"), # nolint
+    tags$br(),
     #downloadButton("downloadCoverageproc", "Cov Procenta ALL", class = "btn-lg btn-primary"), # nolint
     #downloadButton("downloadCNVMproc", "CNV M Procenta", class = "btn-lg btn-primary"), # nolint
     #downloadButton("downloadCNVZproc", "CNV Z Procenta", class = "btn-lg btn-primary"), # nolint
@@ -98,38 +301,80 @@ ui <- page_sidebar(
     )
   ),
 
-  card(
-    uiOutput("gender_input"),
-    uiOutput("action_button"),
-  ),
+  # div(
+  #   class = "card-container",
+  #   card(
+  #     class = "resizable-card",
+  #     uiOutput("info_panel"),
+  #     uiOutput("panel_karta"),
+  #   )
+  # ),
+  # div(class = "resize-handle"),
 
-  card(
-    navset_card_tab(
-      nav_panel("Coverage  Mean ALL", DT::dataTableOutput("coverage_table")), # nolint
-      nav_panel("CNV Muži Mean", DT::dataTableOutput("cnv_m")), # nolint
-      nav_panel("CNV Ženy Mean", DT::dataTableOutput("cnv_z")), # nolint
-      # nav_panel()
-      #nav_panel("Coverage Procenta ALL", DT::dataTableOutput("coverage_table_proc")), # nolint
-      #nav_panel("CNV Muži Procenta", DT::dataTableOutput("cnv_m_proc")), # nolint
-      #nav_panel("CNV Ženy Procenta", DT::dataTableOutput("cnv_z_proc")) # nolint
-    )
-  )
+  div(
+    # class = "card-container",
+  #   card(
+      class = "resize-vertical-card",
+      uiOutput("info_panel"),
+      uiOutput("panel_karta")
+    # )
+  ),
+  # div(class = "resize-handle"),
+
+  # div(
+  #   class = "card-container",
+  #   card(
+  #     class = "resizable-card",
+      navset_card_tab(
+        nav_panel("Coverage  Mean ALL", DT::dataTableOutput("coverage_table")), # nolint
+        nav_panel("CNV Muži Mean", DT::dataTableOutput("cnv_m")), # nolint
+        nav_panel("CNV Ženy Mean", DT::dataTableOutput("cnv_z")), # nolint
+        nav_spacer(),
+        nav_item(align = c("right"), input_switch("switch_on", label = "Filtr", value = FALSE, width = NULL)) # nolint
+        # nav_panel()
+        #nav_panel("Coverage Procenta ALL", DT::dataTableOutput("coverage_table_proc")), # nolint
+        #nav_panel("CNV Muži Procenta", DT::dataTableOutput("cnv_m_proc")), # nolint
+        #nav_panel("CNV Ženy Procenta", DT::dataTableOutput("cnv_z_proc")) # nolint
+      )
+  #   )
+  # ),
+  # div(class = "resize-handle")
 )
 
 ######################################################################################################################## # nolint
 
 # Server logic
 server <- function(input, output, session) {
-  output$text <- renderText({
-    if (is.null(input$file)) return("Kód várky: ")
-    base_names <- sub(".coveragefin\\.txt$", "", input$file$name)
-    codes <- substr(base_names, nchar(base_names) - 1, nchar(base_names))
-    paste("Kód várky: ", unique(codes), collapse = ", \n")
+  output$info_panel <- renderUI({
+    if (is.null(input$file)) {
+      card(
+        tags$div(
+          class = "text-left",
+          style = "margin-bottom: 50px;",
+          tags$p("Nejprve nahrajte soubory."), # nolint
+          tags$p("Po té vyplňte pohlaví a potvrďte tlačítkem. "), # nolint
+          tags$p("Po zpracování se zobrazí výsledky v jednotlivých záložkách."), # nolint
+          tags$p("V případě problémů s nahráváním souborů zkontrolujte, zda jsou ve správném formátu a nepřesahují velikost 30 MB."), # nolint
+          tags$p("Pro vyfiltrování požadovaných genů vyplňte pole pro filtr na bočním panelu.") # nolint
+        )
+      )
+    } else {
+      NULL
+    }
   })
 
   sample_id <- reactive({
     req(input$file)
     gsub(".coveragefin\\.txt$", "", input$file$name)
+  })
+
+  output$panel_karta <- renderUI({
+    req(input$file)
+    div(class = "info-gender-card",
+      tags$h5("Zadejte pohlaví pro každý vzorek:"), # nolint
+      uiOutput("gender_input"),
+      uiOutput("action_button")
+    )
   })
 
   output$gender_input <- renderUI({
@@ -150,41 +395,152 @@ server <- function(input, output, session) {
     })
   })
 
+  # Reactive values to store data and processing status
   final_data <- reactiveVal()
   final_data_proc <- reactiveVal()
+  final_data_proc_original <- reactiveVal()
+  final_data_original <- reactiveVal()
   pohlavi_data <- reactiveVal()
   cnv_m_data <- reactiveVal()
   cnv_z_data <- reactiveVal()
   cnv_m_data_proc <- reactiveVal()
   cnv_z_data_proc <- reactiveVal()
+  cnv_m_data_original <- reactiveVal()
+  cnv_z_data_original <- reactiveVal()
   submit_status <- reactiveVal("ready")
+  regions_data <- reactiveVal(NULL)
 
+  regions <- reactive({
+    selected_regions <- Filter(function(x) "x" != "", input$regions)
+    if (length(selected_regions) == 0) {
+      return(NULL)
+    } else {
+      return(selected_regions)
+    }
+  })
+
+  # show a green submit button 'Zpracovat' after file upload
   output$action_button <- renderUI({
     req(input$file)
-    actionButton(
-      "submit",
-      label = if (submit_status() == "processing") "Zpracovávám..." else "Zpracovat", # nolint
-      icon = if (submit_status() != "processing") icon("check") else NULL,
-      class = if (submit_status() == "processing") "btn btn-primary" else "btn btn-success", # nolint
-      style = "margin-top: 5px; width: 200px; font-size: 20px; padding: 10px;",
-      disabled = submit_status() == "processing"
+    div(class = "submit-task-button",
+      input_task_button(
+        "submit",
+        label = "Zpracovat",
+        submit_status()
+      )
+      # actionButton(
+      #   inputId = "submit",
+      #   label = if (submit_status() == "processing") "Zpracovávám..." else "Zpracovat", # nolint
+      #   icon = if (submit_status() != "processing") icon("check") else NULL,
+      #   class = if (submit_status() == "processing") "btn btn-primary" else "btn btn-success", # nolint
+      #   style = "width: 200px; font-size: 20px; padding: 10px;",
+      #   disabled = submit_status() == "processing"
+      # )
+    )
+    # "submit",
+    # label = if (submit_status() == "processing") "Zpracovávám..." else "Zpracovat", # nolint
+    # icon = if (submit_status() != "processing") icon("check") else NULL,
+    # class = if (submit_status() == "processing") "btn btn-primary" else "btn btn-success", # nolint
+    # style = "margin-top: 5px; width: 200px; font-size: 20px; padding: 10px;",
+    # disabled = submit_status() == "processing"
+  })
+
+  # filter genes - buttons, choices
+  output$regions_selector <- renderUI({
+    div(class = "gene-filter-block",
+      #if (is.null(input$file) || is.null(regions_data())) {
+      if (is.null(input$file)) {
+        tagList(
+          p("Zadejte geny pro filtraci:"),
+          input_task_button(
+            "submit_filtr",
+            label = "Použít filtr",
+            disabled = TRUE,
+            style = "pointer-events: none; opacity: 0.5; border-radius: 8px 8px 0px 0px;"
+          ),
+          selectizeInput(
+            inputId = "regions",
+            label = NULL,
+            choices = character(0),
+            selected = filter_regions,
+            width = "100%",
+            multiple = TRUE
+          ),
+          input_task_button(
+            "reset_filtr",
+            label = "Obnovit vše",
+            style = "pointer-events: none; opacity: 0.5; border-radius: 8px 8px 8px 8px;"
+          ),
+          helpText("Uvedené geny budou vybrány do analýzy. Pokud výběr necháte prázdný, budou zahrnuty všechny oblasti.") # nolint
+        )
+      } else {
+        # after files are loaded
+        all_genes <- unique(c(filter_regions, regions_data()))
+        tagList(
+          p("Zadejte geny pro filtraci:"),
+          input_task_button(
+            "submit_filtr",
+            label = "Použít filtr",
+            style = "border-radius: 8px 8px 0px 0px;"
+          ),
+          selectizeInput(
+            inputId = "regions",
+            label = NULL,
+            choices = all_genes,
+            selected = filter_regions,
+            width = "100%",
+            multiple = TRUE
+          ),
+          input_task_button(
+            "reset_filtr",
+            label = "Obnovit vše",
+            style = "border-radius: 8px 8px 8px 8px;"
+          ),
+          helpText("Uvedené geny budou vybrány do analýzy. Pokud výběr necháte prázdný, budou zahrnuty všechny oblasti.") # nolint
+        )
+      }
     )
   })
 
+  # after upload - extract unique gene names from the 4th column of each file
+  observeEvent(input$file, {
+    withProgress(message = "Načítám seznam oblastí...", value = 0, {
+      incProgress(0.2, detail = "Čtení souborů...")
+
+      dfs <- lapply(input$file$datapath, function(path) {
+        read.delim(path, check.names = FALSE)
+      })
+      gene_names <- unique(unlist(lapply(dfs, function(df) {
+        df[[4]]
+      })))
+      cat("---gene_names---\n")
+      print(head(gene_names, 5))
+
+      incProgress(0.9, detail = "Dokončuji...")
+      regions_data(gene_names)
+    })
+  })
+
+  # when the submit button is clicked, process the data
   observeEvent(input$submit, {
     req(input$file)
     submit_status("processing")
 
     withProgress(message = "Zpracování CNV...", value = 0, {
       submit_status("processing")
+
+      # Step 1: Load coverage data from all files
       incProgress(0.1, detail = "Načítání souborů...")
 
       file_list <- input$file$datapath
       filenames <- input$file$name
       ids <- sample_id()
+
+      # get gender information for each sample
       pohlavi <- sapply(ids, function(id) input[[paste0("pohlavi", id)]])
       pohlavi_df <- data.frame(ID = ids, Gender = pohlavi)
       pohlavi_data(pohlavi_df)
+
       if (!dir.exists("../data_output")) dir.create("../data_output")
       write.csv(pohlavi_df, "../data_output/pohlavi.csv", row.names = FALSE) # nolint
 
@@ -195,6 +551,7 @@ server <- function(input, output, session) {
 
       #showNotification("Soubory coverage a CNV se generují.", type = "message") # nolint
 
+      # Step 2: Extract MEAN column from each input file
       incProgress(0.3, detail = "Generování coverage dat...")
 
       # MEAN
@@ -249,14 +606,25 @@ server <- function(input, output, session) {
 
       colnames(combined) <- trimws(gsub(".COV-mean", "", colnames(combined), fixed = TRUE)) # nolint
       colnames(combined_proc) <- trimws(gsub(".COV-procento", "", colnames(combined_proc), fixed = TRUE)) # nolint
-      final_data(combined)
-      final_data_proc(combined_proc)
 
+      # filter out regions selected in the UI
+      selected_names <- regions()
+      if (!is.null(regions()) && length(regions()) > 0) {
+        pattern <- paste0("\\b(", paste(selected_names, collapse = "|"), ")[A-Za-z0-9_]*\\b") # nolint
+        combined <- combined[!grepl(pattern, combined$name), ]
+      }
+
+      final_data(combined)
+      final_data_original(combined)
+      final_data_proc(combined_proc)
+      final_data_proc_original(combined_proc)
+
+      # Step 3: CNV detection
       incProgress(0.6, detail = "Normalizace CNV M...")
 
       # CNV logic
-      coverage <- final_data()
-      coverage_proc <- final_data_proc()
+      coverage <- final_data_original()
+      coverage_proc <- final_data_proc_original()
       pohlavi <- pohlavi_data()
       #row_id <- seq.int(nrow(coverage)) # nolint
       m <- colnames(coverage)[grepl("^M_", colnames(coverage))]
@@ -267,7 +635,7 @@ server <- function(input, output, session) {
       write.csv(m, "../data_output/m.csv", row.names = FALSE) # nolint
       write.csv(omimgeny, "../data_output/omimgeny.csv", row.names = FALSE) # nolint
 
-      # MEN
+      # CNV for males
       if (length(m) > 0) {
 
         # MEAN
@@ -285,7 +653,8 @@ server <- function(input, output, session) {
         greater_m <- coverage_m_final[rowSums(m_values, na.rm = TRUE) > 0, ]
         greater_m <- annotate_with_omim(greater_m, omimgeny)
         cnv_m_data(greater_m)
-        write.csv(greater_m, "../data_output/greater_m.csv", row.names = FALSE) # nolint)
+        # write.csv(greater_m, "../data_output/greater_m.csv", row.names = FALSE) # nolint)
+        cnv_m_data_original(greater_m)
 
         cat("greater_m \n")
         print(head(greater_m, 5))
@@ -309,7 +678,7 @@ server <- function(input, output, session) {
 
       incProgress(0.8, detail = "Normalizace CNV Z...")
 
-      # WOMEN
+      # CNV for females
       if (length(z) > 0) {
 
         # MEAN
@@ -325,6 +694,8 @@ server <- function(input, output, session) {
         greater_z <- coverage_z_final[rowSums(z_values, na.rm = TRUE) > 0, ]
         greater_z <- annotate_with_omim(greater_z, omimgeny)
         cnv_z_data(greater_z)
+        cnv_z_data_original(greater_z)
+        # write.csv(greater_z, "../data_output/greater_z.csv", row.names = FALSE) # nolint
 
         # PERCENTAGE
         cnv_z_data_proc(cbind(coverage_proc[, c(1:5)], coverage_proc[, z_p, drop = FALSE])) # nolint
@@ -338,11 +709,150 @@ server <- function(input, output, session) {
       incProgress(1, detail = "Hotovo")
     })
 
+    # mark processing as done
     submit_status("ready")
   })
 
+###################################FILTR
+
+  # when filter button is clicked, update the tables based on selected regions
+  observeEvent(input$submit_filtr, {
+    req(final_data_original())
+
+    selected_names <- regions()
+    selected_names <- trimws(as.character(selected_names))
+    selected_names <- selected_names[selected_names != ""]
+
+    if (length(selected_names) == 0) {
+      final_data(final_data_original())
+
+      if (!is.null(cnv_m_data_original())) {
+        cnv_m_data(cnv_m_data_original())
+      }
+      if (!is.null(cnv_z_data_original())) {
+        cnv_z_data(cnv_z_data_original())
+      }
+
+      showNotification("Nejsou vybrány žádné geny", type = "warning")
+
+      bslib::update_switch("switch_on", value = FALSE, session = session)
+
+      cat("No genes selected\n")
+
+      return(NULL)
+    }
+
+    pattern <- paste0("\\b(", paste(selected_names, collapse = "|"), ")\\b")
+
+    filtered_data <- final_data_original() %>%
+      dplyr::filter(stringr::str_detect(name, pattern))
+
+    final_data(filtered_data)
+
+    if (!is.null(cnv_m_data_original())) {
+      filtered_cnv_m <- cnv_m_data_original() %>%
+        dplyr::filter(stringr::str_detect(name, pattern))
+      cnv_m_data(filtered_cnv_m)
+    }
+
+    if (!is.null(cnv_z_data_original())) {
+      filtered_cnv_z <- cnv_z_data_original() %>%
+        dplyr::filter(stringr::str_detect(name, pattern))
+      cnv_z_data(filtered_cnv_z)
+    }
+
+    bslib::update_switch("switch_on", value = TRUE, session = session)
+
+    cat("---genes for filter--- \n")
+    print(head(filtered_data, 10))
+  })
+
+  # } else {
+  #   final_data(final_data_original())
+  #   if (!is.null(cnv_m_data_original())) {
+  #     cnv_m_data(cnv_m_data_original())
+  #   }
+
+  #   if (!is.null(cnv_z_data_original())) {
+  #     cnv_z_data(cnv_z_data_original())
+  #   }
+  #   bslib::update_switch("switch_on", value = FALSE, session = session)
+
+  #   cat("---genes for filter--- \n")
+  #   print(filtered_data)
+  # })
+
+  # when reset button is clicked, reset the tables to original data
+  observeEvent(input$reset_filtr, {
+    req(final_data_original())
+
+    final_data(final_data_original())
+    if (!is.null(cnv_m_data_original())) {
+      cnv_m_data(cnv_m_data_original())
+    }
+    if (!is.null(cnv_z_data_original())) {
+      cnv_z_data(cnv_z_data_original())
+    }
+
+    updateSelectizeInput(session, "selected_names", selected = character(0))
+    bslib::update_switch("switch_on", value = FALSE, session = session)
+
+    cat("---genes for filter--- \n")
+    print("no genes for filter \n")
+  })
+
+  # compare with genes from hg19 and hg38
+  # df_unique_genes <- lapply(input$file$datapath, function(path) {
+  #   read.delim(path, check.names = FALSE)
+  # })
+
+  output$warn_text <- renderUI({
+    selected_genes <- regions()
+    req(selected_genes)
+
+    df_unique_genes <- read.delim(
+      "../unique_hg19_hg38.txt",
+      header = FALSE,
+      stringsAsFactors = FALSE
+    )
+
+    col1 <- trimws(as.character(df_unique_genes[[1]]))
+    col2 <- trimws(as.character(selected_genes))
+
+    cat("---col1--- \n")
+    print(head(col1, 5))
+    cat("---col2--- \n")
+    print(head(col2, 5))
+
+    notInHG <- setdiff(col2, col1)
+
+    cat("---notInHG--- \n")
+    print(head(notInHG, 5))
+
+
+    if (length(col2) == 0) {
+      return(NULL)
+    }
+
+    if (length(notInHG) > 0) {
+      div(
+        style = "color: #A03E5B;",
+        paste(
+          "Tyto geny nejsou v referenčním seznamu hg37 a hg38:",
+          paste(sort(notInHG), collapse = ", ")
+        )
+      )
+    } else {
+      div(
+        style = "color: #008871;",
+        "Všechny zadané geny jsou v referenčním seznamu hg37 a hg38."
+      )
+    }
+  })
+
   # Tables
-  # MEAN
+  # the main coverage table - Renders the combined mean coverage data in a scrollable DataTable  # nolint
+  # with pagination and horizontal/vertical scrolling.
   output$coverage_table <- DT::renderDataTable({
     req(final_data())
     df <- final_data()
@@ -351,11 +861,15 @@ server <- function(input, output, session) {
       df,
       options = list(
         pageLength = 25,
-        scrollX = TRUE
+        scrollX = TRUE,
+        scrollY = "600px",
+        scrollCollapse = TRUE
       )
     )
   })
 
+  # CNV results for males
+  # Shows normalized coverage deviations for male samples, with annotation from OMIM. # nolint
   output$cnv_m <- DT::renderDataTable({
     req(cnv_m_data())
     df <- cnv_m_data()
@@ -364,11 +878,26 @@ server <- function(input, output, session) {
       df,
       options = list(
         pageLength = 25,
-        scrollX = TRUE
+        scrollX = TRUE,
+        scrollY = "600px",
+        scrollCollapse = TRUE,
+        columnDefs = list(
+          list(
+            targets = which(colnames(df) == "OMIM"),
+            width = "800px"
+          )
+        )
+      ),
+      escape = FALSE
+    ) %>%
+      DT::formatStyle(
+        "OMIM",
+        `white-space` = "normal"
       )
-    )
   })
 
+  # CNV results for females
+  # Shows normalized coverage deviations for female samples, with annotation from OMIM. # nolint
   output$cnv_z <- DT::renderDataTable({
     req(cnv_z_data())
     df <- cnv_z_data()
@@ -377,15 +906,27 @@ server <- function(input, output, session) {
       df,
       options = list(
         pageLength = 25,
-        scrollX = TRUE
+        scrollX = TRUE,
+        columnDefs = list(
+          list(
+            targets = which(colnames(df) == "OMIM"),
+            width = "800px"
+          )
+        )
+      ),
+      escape = FALSE
+    ) %>%
+      DT::formatStyle(
+        "OMIM",
+        `white-space` = "normal"
       )
-    )
   })
 
-  # PERCENTAGE
+  # coverage data in percentages
+  # This table displays percent coverage values before normalization.
   output$coverage_table_proc <- DT::renderDataTable({
-    req(final_data_proc())
-    df <- final_data_proc()
+    req(final_data_proc_original())
+    df <- final_data_proc_original()
     validate(need(nrow(df) > 0, "Žádná data pro procenta pokrytí"))
     DT::datatable(
       df,
@@ -395,6 +936,9 @@ server <- function(input, output, session) {
       )
     )
   })
+
+  # raw percentage values for CNV M
+  # Displays coverage percentage for male samples without normalization.
   output$cnv_m_proc <- DT::renderDataTable({
     req(cnv_m_data_proc())
     df <- cnv_m_data_proc()
@@ -407,6 +951,9 @@ server <- function(input, output, session) {
       )
     )
   })
+
+  # raw percentage values for CNV Z
+  # Displays coverage percentage for female samples without normalization.
   output$cnv_z_proc <- DT::renderDataTable({
     req(cnv_z_data_proc())
     df <- cnv_z_data_proc()
@@ -422,23 +969,33 @@ server <- function(input, output, session) {
 
   # Downloads
   output$downloadCoveragemean <- downloadHandler(
-    filename = function() { "coveragemeanALL.csv" },
+    #filename = function() { "coveragemeanALL.csv" },
+    filename = function() {
+      paste0("coveragecoveragemeanALL_", format(Sys.time(), "%Y%m%d"), ".csv")
+    },
     content = function(file) {
       write.csv2(final_data(), file, row.names = FALSE, quote = TRUE, fileEncoding = "UTF-8") # nolint
     }
   )
   output$downloadCNVMmean <- downloadHandler(
-    filename = function() { "CNV_M_mean.csv" },
+    #filename = function() { "CNV_M_mean.csv" },
+    filename = function() { 
+      paste0("CNV_M_mean_", format(Sys.time(), "%Y%m%d"), ".csv") 
+    },
     content = function(file) {
       write.csv2(cnv_m_data(), file, row.names = FALSE, quote = TRUE, fileEncoding = "UTF-8") # nolint
     }
   )
   output$downloadCNVZmean <- downloadHandler(
-    filename = function() { "CNV_Z_mean.csv" },
+    #filename = function() { "CNV_Z_mean.csv" },
+    filename = function() { 
+      paste0("CNV_Z_mean_", format(Sys.time(), "%Y%m%d"), ".csv") 
+    },
     content = function(file) {
       write.csv2(cnv_z_data(), file, row.names = FALSE, quote = TRUE, fileEncoding = "UTF-8") # nolint
     }
   )
+
   #output$downloadCoverageproc <- downloadHandler(
   #  filename = function() { "coverageprocentoALL.csv" },
   #  content = function(file) {
