@@ -3,6 +3,7 @@ library(bslib)
 library(magrittr)
 library(stringr)
 library(DT)
+library(blastula)
 options(shiny.maxRequestSize = 30 * 1024^2) # max 30 MB
 
 # Load helper functions
@@ -121,7 +122,7 @@ ui <- page_sidebar(
       .resize-vertical-card{
         resize: vertical; 
         overflow: auto; 
-        height: 300px; 
+        height: auto; 
         box-shadow: 0 0.085rem 0.20rem rgba(0, 0, 0, 0.150);
         border-radius: 0.5rem;
         background-color: white;
@@ -130,6 +131,18 @@ ui <- page_sidebar(
       .resize-vertical-card .card {
         box-shadow: none !important;
         border: none !important;
+      }
+      .info-card {
+        height: auto;
+        overflow: visible;
+        margin-bottom: 10px;
+      }
+      .panel-card {
+        height: 300px;
+        overflow: auto;   /* aby scrollovala */
+        box-shadow: 0 0.085rem 0.20rem rgba(0, 0, 0, 0.150);
+        border-radius: 0.5rem;
+        background-color: white;
       }
       .btn-file {
         font-size: 16px;
@@ -327,7 +340,12 @@ ui <- page_sidebar(
       href = "https://www.omim.org", target = "_blank",
       style = "font-weight: bold; font-size: 16px; display: block; margin-top: 10px;", # nolint
       icon("database"), "OMIM databáze"
-    )
+    ),
+
+    # conditionalPanel(
+    #   condition = "input.show_bug_form % 2 == 1",
+    #   textAreaInput("bug_report", "Popis chyby", rows = 5),
+    #   actionButton("send_bug", "Odeslat")
   ),
 
   # div(
@@ -340,13 +358,20 @@ ui <- page_sidebar(
   # ),
   # div(class = "resize-handle"),
 
+  # div(
+  #   class = "resize-vertical-card",
+  #   uiOutput("info_panel"),
+  #   uiOutput("panel_karta")
+  # ),
+
   div(
-    # class = "card-container",
-  #   card(
-      class = "resize-vertical-card",
-      uiOutput("info_panel"),
-      uiOutput("panel_karta")
-    # )
+    class = "info-card",
+    uiOutput("info_panel")
+  ),
+
+  div(
+    class = "panel-card",
+    uiOutput("panel_karta")
   ),
   # div(class = "resize-handle"),
 
@@ -354,17 +379,17 @@ ui <- page_sidebar(
   #   class = "card-container",
   #   card(
   #     class = "resizable-card",
-      navset_card_tab(
-        nav_panel("Coverage  Mean ALL", DT::dataTableOutput("coverage_table")), # nolint
-        nav_panel("CNV Muži Mean", DT::dataTableOutput("cnv_m")), # nolint
-        nav_panel("CNV Ženy Mean", DT::dataTableOutput("cnv_z")), # nolint
-        nav_spacer(),
-        nav_item(align = c("right"), input_switch("switch_on", label = "Filtr", value = FALSE, width = NULL)) # nolint
-        # nav_panel()
-        #nav_panel("Coverage Procenta ALL", DT::dataTableOutput("coverage_table_proc")), # nolint
-        #nav_panel("CNV Muži Procenta", DT::dataTableOutput("cnv_m_proc")), # nolint
-        #nav_panel("CNV Ženy Procenta", DT::dataTableOutput("cnv_z_proc")) # nolint
-      )
+  navset_card_tab(
+    nav_panel("Coverage  Mean ALL", DT::dataTableOutput("coverage_table")), # nolint
+    nav_panel("CNV Muži Mean", DT::dataTableOutput("cnv_m")), # nolint
+    nav_panel("CNV Ženy Mean", DT::dataTableOutput("cnv_z")), # nolint
+    nav_spacer(),
+    nav_item(align = c("right"), input_switch("switch_on", label = "Filtr", value = FALSE, width = NULL)) # nolint
+    # nav_panel()
+    #nav_panel("Coverage Procenta ALL", DT::dataTableOutput("coverage_table_proc")), # nolint
+    #nav_panel("CNV Muži Procenta", DT::dataTableOutput("cnv_m_proc")), # nolint
+    #nav_panel("CNV Ženy Procenta", DT::dataTableOutput("cnv_z_proc")) # nolint
+  )
   #   )
   # ),
   # div(class = "resize-handle")
@@ -384,7 +409,9 @@ server <- function(input, output, session) {
           tags$p("Po té zvolte pohlaví a potvrďte tlačítkem Zpracovat. "), # nolint
           tags$p("Po zpracování se zobrazí výsledky v jednotlivých záložkách."), # nolint
           tags$p("V případě problémů s nahráváním souborů zkontrolujte, zda jsou ve správném formátu a nepřesahují velikost 30 MB."), # nolint
-          tags$p("Pro vyfiltrování požadovaných genů vyplňte pole pro filtr na bočním panelu a klikněte na 'Použít filtr'. Tlačítkem Obnovit vše filtr smažete a vrátíte tabullky do původního stavu. V poli pro filtr se automaticky nabízejí geny ze sloupce 'name' z nahraných souborů. ") # nolint
+          tags$p("Pro vyfiltrování požadovaných genů vyplňte pole pro filtr na bočním panelu a klikněte na 'Použít filtr'. Tlačítkem Obnovit vše filtr smažete a vrátíte tabullky do původního stavu. V poli pro filtr se automaticky nabízejí geny ze sloupce 'name' z nahraných souborů. "), # nolint
+          tags$p("Něco nefunguje?"),
+          actionButton("show_bug_form", "Nahlásit chybu"),
         )
       )
     } else {
@@ -440,7 +467,7 @@ server <- function(input, output, session) {
   regions_data <- reactiveVal(NULL)
 
   regions <- reactive({
-    selected_regions <- Filter(function(x) "x" != "", input$regions)
+    selected_regions <- Filter(function(x) x != "", input$regions)
     if (length(selected_regions) == 0) {
       return(NULL)
     } else {
@@ -1048,6 +1075,134 @@ server <- function(input, output, session) {
   #    write.csv2(cnv_z_data_proc(), file, row.names = FALSE, quote = FALSE, fileEncoding = "UTF-8") # nolint
   #  }
   #)
+
+  # observeEvent(input$send_bug, {
+  #   report_text <- trimws(input$bug_report)
+
+  #   if (report_text == "") {
+  #     showNotification("Nejprve napište popis chyby.", type = "warning")
+  #     return()
+  #   }
+
+  #   uploaded_files <- if (!is.null(input$file)) {
+  #     paste(input$file$name, collapse = ", ")
+  #   } else {
+  #     "žádné"
+  #   }
+
+  #   selected_genes <- if (!is.null(input$regions)) {
+  #     paste(input$regions, collapse = ", ")
+  #   } else {
+  #     "žádné"
+  #   }
+
+  #   email_body <- paste(
+  #     "Bylo nahlášeno chování aplikace.",
+  #     "",
+  #     paste("Čas:", Sys.time()),
+  #     paste("Nahrané soubory:", uploaded_files),
+  #     paste("Vybrané geny:", selected_genes),
+  #     "",
+  #     "Popis:",
+  #     report_text,
+  #     sep = "\n"
+  #   )
+
+  #   blastula::smtp_send(
+  #     from = Sys.getenv("APP_EMAIL_FROM"),
+  #     to = "10867@fnbrno.cz",
+  #     subject = "Chyba v aplikaci Exom Analýza cnv+filtr",
+  #     credentials = blastula::creds(
+  #       host = Sys.getenv("APP_SMTP_HOST"),
+  #       port = as.integer(Sys.getenv("APP_SMTP_PORT")),
+  #       user = Sys.getenv("APP_SMTP_USER"),
+  #       pass = Sys.getenv("APP_SMTP_PASS"),
+  #       use_ssl = TRUE
+  #     ),
+  #     body = blastula::md(email_body)
+  #   )
+
+  #   updateTextAreaInput(session, "bug_report", value = "")
+  #   showNotification("Hlášení bylo odesláno.", type = "message")
+  # }),
+
+  observeEvent(input$show_bug_form, {
+    showModal(
+      modalDialog(
+        title = "Nahlásit chybu",
+
+        textAreaInput(
+          "bug_report",
+          "Popis chyby",
+          rows = 5,
+          width = "100%",
+          placeholder = "Popište, co jste udělali, co jste čekali a co se stalo."
+        ),
+
+        footer = tagList(
+          modalButton("Zavřít"),
+          actionButton("send_bug", "Odeslat")
+        ),
+        easyClose = TRUE
+      )
+    )
+  })
+
+  observeEvent(input$send_bug, {
+    req(input$bug_report)
+
+    report_text <- trimws(input$bug_report)
+    if (report_text == "") return()
+
+    log_line <- data.frame(
+      time = Sys.time(),
+      report = report_text,
+      stringsAsFactors = FALSE
+    )
+
+    write.table(
+      log_line,
+      file = "bug_reports.csv",
+      sep = ";",
+      row.names = FALSE,
+      col.names = !file.exists("bug_reports.csv"),
+      append = file.exists("bug_reports.csv")
+    )
+
+    showNotification("Díky! Podívám se na to.", type = "message")
+  })
+
+  # observeEvent(input$send_bug, {
+  #   report_text <- trimws(input$bug_report)
+
+  #   if (report_text == "") {
+  #     showNotification("Nejprve napište popis chyby.", type = "warning")
+  #     return()
+  #   }
+
+  #   email <- blastula::compose_email(
+  #     body = blastula::md(report_text)
+  #   )
+
+  #   blastula::smtp_send(
+  #     email = email,
+  #     from = Sys.getenv("APP_EMAIL_FROM"),
+  #     to = "10867@fnbrno.cz",
+  #     subject = "Chyba v aplikaci Exom Analýza cnv+filtr",
+  #     credentials = blastula::creds_user_pass(
+  #       user = Sys.getenv("APP_SMTP_USER"),
+  #       pass = Sys.getenv("APP_SMTP_PASS")
+  #     ),
+
+  #     host = Sys.getenv("APP_SMTP_HOST"),
+  #     port = as.integer(Sys.getenv("APP_SMTP_PORT")),
+  #     use_ssl = TRUE
+  #   )
+
+  #   removeModal()
+  #   showNotification("Hlášení bylo odesláno.", type = "message")
+  # })
+
 }
 
 # Run the application
