@@ -29,7 +29,7 @@ ui <- page_sidebar(
 
         let startY, startHeight;
 
-        handle.addEventListener('mousedown', function(e) => {
+        handle.addEventListener('mousedown', function(e) {
           startY = e.clientY;
           startHeight = box.offsetHeight;
 
@@ -43,9 +43,38 @@ ui <- page_sidebar(
         }
 
         function stopMove() {
-          document.removeEventListener('mousemove, onMove);
+          document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', stopMove);
         }
+
+
+      });
+      $(document).on('paste', '#regions + .selectize-control input', function(e) {
+        var pasted = (e.originalEvent || e).clipboardData.getData('text');
+        if (!pasted) return;
+
+        e.preventDefault();
+
+        var el = $('#regions')[0];
+        if (!el || !el.selectize) return;
+
+        var selectize = el.selectize;
+
+        var parts = pasted
+          .split(/[\\n,;\\t ]+/)
+          .map(function(x) { return x.trim(); })
+          .filter(function(x) { return x.length > 0; });
+
+        parts.forEach(function(val) {
+          if (selectize.options.hasOwnProperty(val)) {
+            selectize.addItem(val);
+          }
+        });
+
+        selectize.refreshItems();
+        selectize.refreshOptions(false);
+        selectize.updateOriginalInput();
+        $(el).trigger('change');
       });
     ")),
 
@@ -351,11 +380,11 @@ server <- function(input, output, session) {
         tags$div(
           class = "text-left",
           style = "margin-bottom: 50px;",
-          tags$p("Nejprve nahrajte soubory."), # nolint
-          tags$p("Po té vyplňte pohlaví a potvrďte tlačítkem. "), # nolint
+          tags$p("Nejprve nahrajte soubory s příponou 'coveragefin.txt'."), # nolint
+          tags$p("Po té zvolte pohlaví a potvrďte tlačítkem Zpracovat. "), # nolint
           tags$p("Po zpracování se zobrazí výsledky v jednotlivých záložkách."), # nolint
           tags$p("V případě problémů s nahráváním souborů zkontrolujte, zda jsou ve správném formátu a nepřesahují velikost 30 MB."), # nolint
-          tags$p("Pro vyfiltrování požadovaných genů vyplňte pole pro filtr na bočním panelu.") # nolint
+          tags$p("Pro vyfiltrování požadovaných genů vyplňte pole pro filtr na bočním panelu a klikněte na 'Použít filtr'. Tlačítkem Obnovit vše filtr smažete a vrátíte tabullky do původního stavu. V poli pro filtr se automaticky nabízejí geny ze sloupce 'name' z nahraných souborů. ") # nolint
         )
       )
     } else {
@@ -464,7 +493,12 @@ server <- function(input, output, session) {
             choices = character(0),
             selected = filter_regions,
             width = "100%",
-            multiple = TRUE
+            multiple = TRUE,
+            options = list(
+              create = TRUE,
+              delimiter = " ",
+              persist = FALSE
+            )
           ),
           input_task_button(
             "reset_filtr",
@@ -713,7 +747,7 @@ server <- function(input, output, session) {
     submit_status("ready")
   })
 
-###################################FILTR
+  # filter
 
   # when filter button is clicked, update the tables based on selected regions
   observeEvent(input$submit_filtr, {
