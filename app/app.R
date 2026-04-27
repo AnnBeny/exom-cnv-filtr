@@ -3,7 +3,7 @@ library(bslib)
 library(magrittr)
 library(stringr)
 library(DT)
-library(blastula)
+
 options(shiny.maxRequestSize = 30 * 1024^2) # max 30 MB
 
 # Load helper functions
@@ -340,12 +340,7 @@ ui <- page_sidebar(
       href = "https://www.omim.org", target = "_blank",
       style = "font-weight: bold; font-size: 16px; display: block; margin-top: 10px;", # nolint
       icon("database"), "OMIM databáze"
-    ),
-
-    # conditionalPanel(
-    #   condition = "input.show_bug_form % 2 == 1",
-    #   textAreaInput("bug_report", "Popis chyby", rows = 5),
-    #   actionButton("send_bug", "Odeslat")
+    )
   ),
 
   # div(
@@ -453,18 +448,20 @@ server <- function(input, output, session) {
 
   # Reactive values to store data and processing status
   final_data <- reactiveVal()
-  final_data_proc <- reactiveVal()
-  final_data_proc_original <- reactiveVal()
+  # final_data_proc <- reactiveVal()
   final_data_original <- reactiveVal()
   pohlavi_data <- reactiveVal()
   cnv_m_data <- reactiveVal()
-  cnv_z_data <- reactiveVal()
-  cnv_m_data_proc <- reactiveVal()
-  cnv_z_data_proc <- reactiveVal()
   cnv_m_data_original <- reactiveVal()
+  cnv_z_data <- reactiveVal()
   cnv_z_data_original <- reactiveVal()
+  # cnv_m_data_proc <- reactiveVal()
+  # cnv_z_data_proc <- reactiveVal()
   submit_status <- reactiveVal("ready")
   regions_data <- reactiveVal(NULL)
+  filtered_data <- reactiveVal()
+  filtered_cnv_m <- reactiveVal()
+  filtered_cnv_z <- reactiveVal()
 
   regions <- reactive({
     selected_regions <- Filter(function(x) x != "", input$regions)
@@ -484,21 +481,7 @@ server <- function(input, output, session) {
         label = "Zpracovat",
         submit_status()
       )
-      # actionButton(
-      #   inputId = "submit",
-      #   label = if (submit_status() == "processing") "Zpracovávám..." else "Zpracovat", # nolint
-      #   icon = if (submit_status() != "processing") icon("check") else NULL,
-      #   class = if (submit_status() == "processing") "btn btn-primary" else "btn btn-success", # nolint
-      #   style = "width: 200px; font-size: 20px; padding: 10px;",
-      #   disabled = submit_status() == "processing"
-      # )
     )
-    # "submit",
-    # label = if (submit_status() == "processing") "Zpracovávám..." else "Zpracovat", # nolint
-    # icon = if (submit_status() != "processing") icon("check") else NULL,
-    # class = if (submit_status() == "processing") "btn btn-primary" else "btn btn-success", # nolint
-    # style = "margin-top: 5px; width: 200px; font-size: 20px; padding: 10px;",
-    # disabled = submit_status() == "processing"
   })
 
   # filter genes - buttons, choices
@@ -562,6 +545,8 @@ server <- function(input, output, session) {
       }
     )
   })
+
+  # MAIN
 
   # after upload - extract unique gene names from the 4th column of each file
   observeEvent(input$file, {
@@ -637,61 +622,53 @@ server <- function(input, output, session) {
       #print(head(selected_cols_list, 5))
 
       # PERCENTAGE
-      selected_cols_list_proc <- lapply(seq_along(file_list), function(i) {
-        tryCatch({
-          df <- read.delim(file_list[i], check.names = FALSE)
-          #if (nrow(df) < 1 || ncol(df) < 15) stop()
-          selected <- df[, 6, drop = FALSE]
-          base_name <- tools::file_path_sans_ext(gsub(".coveragefin\\.txt$", "", filenames[i])) # nolint
-          gender <- input[[paste0("pohlavi", ids[i])]]
-          colnames(selected) <- paste0(gender, "_", base_name)
-          return(selected)
-        }, error = function(e) {
-          showNotification(paste("Chyba u souboru:", filenames[i]), type = "error") # nolint
-          return(NULL)
-        })
-      })
-      write.csv(selected_cols_list_proc, "../data_output/selected_col_list_proc.csv", row.names = FALSE) # nolint
+      # selected_cols_list_proc <- lapply(seq_along(file_list), function(i) {
+      #   tryCatch({
+      #     df <- read.delim(file_list[i], check.names = FALSE)
+      #     #if (nrow(df) < 1 || ncol(df) < 15) stop()
+      #     selected <- df[, 6, drop = FALSE]
+      #     base_name <- tools::file_path_sans_ext(gsub(".coveragefin\\.txt$", "", filenames[i])) # nolint
+      #     gender <- input[[paste0("pohlavi", ids[i])]]
+      #     colnames(selected) <- paste0(gender, "_", base_name)
+      #     return(selected)
+      #   }, error = function(e) {
+      #     showNotification(paste("Chyba u souboru:", filenames[i]), type = "error") # nolint
+      #     return(NULL)
+      #   })
+      # })
+      # write.csv(selected_cols_list_proc, "../data_output/selected_col_list_proc.csv", row.names = FALSE) # nolint
 
       #cat("selected_cols_list_proc \n")
       #print(head(selected_cols_list_proc, 5))
 
       result <- do.call(cbind, selected_cols_list)
-      result_proc <- do.call(cbind, selected_cols_list_proc)
+      # result_proc <- do.call(cbind, selected_cols_list_proc)
 
       prvni_trisloupce <- read.delim(file_list[1], check.names = FALSE)[, 1:4]
 
       combined <- cbind(prvni_trisloupce, result)
-      combined_proc <- cbind(prvni_trisloupce, result_proc)
+      # combined_proc <- cbind(prvni_trisloupce, result_proc)
       write.csv(combined, "../data_output/combined.csv", row.names = FALSE) # nolint
 
       colnames(combined) <- trimws(gsub(".COV-mean", "", colnames(combined), fixed = TRUE)) # nolint
-      colnames(combined_proc) <- trimws(gsub(".COV-procento", "", colnames(combined_proc), fixed = TRUE)) # nolint
-
-      # filter out regions selected in the UI
-      selected_names <- regions()
-      if (!is.null(regions()) && length(regions()) > 0) {
-        pattern <- paste0("\\b(", paste(selected_names, collapse = "|"), ")[A-Za-z0-9_]*\\b") # nolint
-        combined <- combined[!grepl(pattern, combined$name), ]
-      }
+      # colnames(combined_proc) <- trimws(gsub(".COV-procento", "", colnames(combined_proc), fixed = TRUE)) # nolint
 
       final_data(combined)
       final_data_original(combined)
-      final_data_proc(combined_proc)
-      final_data_proc_original(combined_proc)
+      # final_data_proc(combined_proc)
 
       # Step 3: CNV detection
       incProgress(0.6, detail = "Normalizace CNV M...")
 
       # CNV logic
-      coverage <- final_data_original()
-      coverage_proc <- final_data_proc_original()
+      coverage <- final_data()
+      # coverage_proc <- final_data_proc()
       pohlavi <- pohlavi_data()
       #row_id <- seq.int(nrow(coverage)) # nolint
       m <- colnames(coverage)[grepl("^M_", colnames(coverage))]
       z <- colnames(coverage)[grepl("^Z_", colnames(coverage))]
-      m_p <- colnames(coverage_proc)[grepl("^M_", colnames(coverage_proc))]
-      z_p <- colnames(coverage_proc)[grepl("^Z_", colnames(coverage_proc))]
+      # m_p <- colnames(coverage_proc)[grepl("^M_", colnames(coverage_proc))]
+      # z_p <- colnames(coverage_proc)[grepl("^Z_", colnames(coverage_proc))]
       omimgeny <- load_omim_file()
       write.csv(m, "../data_output/m.csv", row.names = FALSE) # nolint
       write.csv(omimgeny, "../data_output/omimgeny.csv", row.names = FALSE) # nolint
@@ -714,8 +691,8 @@ server <- function(input, output, session) {
         greater_m <- coverage_m_final[rowSums(m_values, na.rm = TRUE) > 0, ]
         greater_m <- annotate_with_omim(greater_m, omimgeny)
         cnv_m_data(greater_m)
-        # write.csv(greater_m, "../data_output/greater_m.csv", row.names = FALSE) # nolint)
         cnv_m_data_original(greater_m)
+        # write.csv(greater_m, "../data_output/greater_m.csv", row.names = FALSE) # nolint)
 
         cat("greater_m \n")
         print(head(greater_m, 5))
@@ -723,18 +700,18 @@ server <- function(input, output, session) {
         print(head(coverage_m_final, 5))
 
         # PERCENTAGE
-        coverage_proc$Row_id <- seq_len(nrow(coverage_proc))
-        #cnv_m_data_proc(cbind(coverage_proc[, c(1:4)], coverage_proc[, m_p, drop = FALSE])) # nolint
-        cnv_m_data_proc(
-          cbind(
-            coverage_proc[, c("chr", "start", "stop", "name", "Row_id")],
-            coverage_proc[, m_p, drop = FALSE]
-          )
-        )
+        # coverage_proc$Row_id <- seq_len(nrow(coverage_proc))
+        # #cnv_m_data_proc(cbind(coverage_proc[, c(1:4)], coverage_proc[, m_p, drop = FALSE])) # nolint
+        # cnv_m_data_proc(
+        #   cbind(
+        #     coverage_proc[, c("chr", "start", "stop", "name", "Row_id")],
+        #     coverage_proc[, m_p, drop = FALSE]
+        #   )
+        # )
         #write.table(cnv_m_data_proc, "../data_output/cnv_m_data_proc.csv", row.names = FALSE) # nolint)
 
-        cat("coverage_proc \n")
-        print(head(coverage_proc, 5))
+        # cat("coverage_proc \n")
+        # print(head(coverage_proc, 5))
       }
 
       incProgress(0.8, detail = "Normalizace CNV Z...")
@@ -759,73 +736,97 @@ server <- function(input, output, session) {
         # write.csv(greater_z, "../data_output/greater_z.csv", row.names = FALSE) # nolint
 
         # PERCENTAGE
-        cnv_z_data_proc(cbind(coverage_proc[, c(1:5)], coverage_proc[, z_p, drop = FALSE])) # nolint
-        cnv_z_data_proc(
-          cbind(
-            coverage_proc[, c("chr", "start", "stop", "name", "Row_id")],
-            coverage_proc[, z_p, drop = FALSE]
-          )
-        )
+        # cnv_z_data_proc(cbind(coverage_proc[, c(1:5)], coverage_proc[, z_p, drop = FALSE])) # nolint
+        # cnv_z_data_proc(
+        #   cbind(
+        #     coverage_proc[, c("chr", "start", "stop", "name", "Row_id")],
+        #     coverage_proc[, z_p, drop = FALSE]
+        #   )
+        # )
       }
       incProgress(1, detail = "Hotovo")
     })
 
     # mark processing as done
     submit_status("ready")
+
+    # final_data, final_data_original
+    # cnv_z_data, cnv_z_data_original
+    # cnv_m_data, cnv_m_data_original
   })
 
-  # filter
+  # FILTER
 
   # when filter button is clicked, update the tables based on selected regions
   observeEvent(input$submit_filtr, {
-    req(final_data_original())
+    req(final_data())
 
     selected_names <- regions()
     selected_names <- trimws(as.character(selected_names))
     selected_names <- selected_names[selected_names != ""]
 
     if (length(selected_names) == 0) {
-      final_data(final_data_original())
+      # final_data(final_data())
+      cat("---No genes selected, showing original data---\n")
+      print(head(final_data, 5))
 
-      if (!is.null(cnv_m_data_original())) {
-        cnv_m_data(cnv_m_data_original())
-      }
-      if (!is.null(cnv_z_data_original())) {
-        cnv_z_data(cnv_z_data_original())
-      }
+      # if (!is.null(cnv_m_data())) {
+      #   cnv_m_data(cnv_m_data())
+      #   cat("---Reset CNV M---\n")
+      #   print(head(cnv_m_data, 5))
+      # }
+      # if (!is.null(cnv_z_data())) {
+      #   cnv_z_data(cnv_z_data())
+      #   cat("---Reset CNV Z---\n")
+      #   print(head(cnv_z_data, 5))
+      # }
 
       showNotification("Nejsou vybrány žádné geny", type = "warning")
 
-      bslib::update_switch("switch_on", value = FALSE, session = session)
+      # bslib::update_switch("switch_on", value = FALSE, session = session)
 
       cat("No genes selected\n")
 
       return(NULL)
-    }
+    } else {
 
-    pattern <- paste0("\\b(", paste(selected_names, collapse = "|"), ")\\b")
+      # selected_names_escaped <- stringr::str_replace_all(
+      #   selected_names,
+      #   "([.\\^$|()\\[\\]{}*+?\\\\])",
+      #   "\\\\\\1"
+      # )
+      # pattern <- paste0("(^|[^A-Za-z0-9])(", paste(selected_names_escaped, collapse = "|"), ")([^A-Za-z0-9]|$)")
+      pattern <- paste0("\\b(", paste(selected_names, collapse = "|"), ")\\b")
 
-    filtered_data <- final_data_original() %>%
-      dplyr::filter(stringr::str_detect(name, pattern))
-
-    final_data(filtered_data)
-
-    if (!is.null(cnv_m_data_original())) {
-      filtered_cnv_m <- cnv_m_data_original() %>%
+      filtered_data <- final_data() %>%
         dplyr::filter(stringr::str_detect(name, pattern))
-      cnv_m_data(filtered_cnv_m)
+
+      final_data(filtered_data)
+
+      if (!is.null(cnv_m_data())) {
+        filtered_cnv_m <- cnv_m_data() %>%
+          dplyr::filter(stringr::str_detect(name, pattern))
+        cnv_m_data(filtered_cnv_m)
+      }
+
+      if (!is.null(cnv_z_data())) {
+        filtered_cnv_z <- cnv_z_data() %>%
+          dplyr::filter(stringr::str_detect(name, pattern))
+        cnv_z_data(filtered_cnv_z)
+      }
+
+      bslib::update_switch("switch_on", value = TRUE, session = session)
+
+      cat("---FILTER--- \n")
+      cat("---genes for filter--- \n")
+      print(head(filtered_data(), 10))
+      cat("---final_data--- \n")
+      print(head(final_data(), 10))
+      cat("---cnv_m_data--- \n")
+      print(head(filtered_cnv_m(), 10))
+      cat("---cnv_z_data--- \n")
+      print(head(filtered_cnv_z(), 10))
     }
-
-    if (!is.null(cnv_z_data_original())) {
-      filtered_cnv_z <- cnv_z_data_original() %>%
-        dplyr::filter(stringr::str_detect(name, pattern))
-      cnv_z_data(filtered_cnv_z)
-    }
-
-    bslib::update_switch("switch_on", value = TRUE, session = session)
-
-    cat("---genes for filter--- \n")
-    print(head(filtered_data, 10))
   })
 
   # } else {
@@ -860,6 +861,15 @@ server <- function(input, output, session) {
 
     cat("---genes for filter--- \n")
     print("no genes for filter \n")
+    cat("---AFTER RESET--- \n")
+    cat("---genes for filter--- \n")
+    print(head(final_data(), 10))
+    cat("---final_data--- \n")
+    print(head(final_data(), 10))
+    cat("---cnv_m_data--- \n")
+    print(head(cnv_m_data(), 10))
+    cat("---cnv_z_data--- \n")
+    print(head(cnv_z_data(), 10))
   })
 
   # compare with genes from hg19 and hg38
@@ -985,48 +995,48 @@ server <- function(input, output, session) {
 
   # coverage data in percentages
   # This table displays percent coverage values before normalization.
-  output$coverage_table_proc <- DT::renderDataTable({
-    req(final_data_proc_original())
-    df <- final_data_proc_original()
-    validate(need(nrow(df) > 0, "Žádná data pro procenta pokrytí"))
-    DT::datatable(
-      df,
-      options = list(
-        pageLength = 25,
-        scrollX = TRUE
-      )
-    )
-  })
+  # output$coverage_table_proc <- DT::renderDataTable({
+  #   req(final_data_proc())
+  #   df <- final_data_proc()
+  #   validate(need(nrow(df) > 0, "Žádná data pro procenta pokrytí"))
+  #   DT::datatable(
+  #     df,
+  #     options = list(
+  #       pageLength = 25,
+  #       scrollX = TRUE
+  #     )
+  #   )
+  # })
 
   # raw percentage values for CNV M
   # Displays coverage percentage for male samples without normalization.
-  output$cnv_m_proc <- DT::renderDataTable({
-    req(cnv_m_data_proc())
-    df <- cnv_m_data_proc()
-    validate(need(nrow(df) > 0, "Žádná data pro procenta CNV M"))
-    DT::datatable(
-      df,
-      options = list(
-        pageLength = 25,
-        scrollX = TRUE
-      )
-    )
-  })
+  # output$cnv_m_proc <- DT::renderDataTable({
+  #   req(cnv_m_data_proc())
+  #   df <- cnv_m_data_proc()
+  #   validate(need(nrow(df) > 0, "Žádná data pro procenta CNV M"))
+  #   DT::datatable(
+  #     df,
+  #     options = list(
+  #       pageLength = 25,
+  #       scrollX = TRUE
+  #     )
+  #   )
+  # })
 
   # raw percentage values for CNV Z
   # Displays coverage percentage for female samples without normalization.
-  output$cnv_z_proc <- DT::renderDataTable({
-    req(cnv_z_data_proc())
-    df <- cnv_z_data_proc()
-    validate(need(nrow(df) > 0, "Žádná data pro procenta CNV Z"))
-    DT::datatable(
-      df,
-      options = list(
-        pageLength = 25,
-        scrollX = TRUE
-      )
-    )
-  })
+  # output$cnv_z_proc <- DT::renderDataTable({
+  #   req(cnv_z_data_proc())
+  #   df <- cnv_z_data_proc()
+  #   validate(need(nrow(df) > 0, "Žádná data pro procenta CNV Z"))
+  #   DT::datatable(
+  #     df,
+  #     options = list(
+  #       pageLength = 25,
+  #       scrollX = TRUE
+  #     )
+  #   )
+  # })
 
   # Downloads
   output$downloadCoveragemean <- downloadHandler(
@@ -1076,56 +1086,7 @@ server <- function(input, output, session) {
   #  }
   #)
 
-  # observeEvent(input$send_bug, {
-  #   report_text <- trimws(input$bug_report)
-
-  #   if (report_text == "") {
-  #     showNotification("Nejprve napište popis chyby.", type = "warning")
-  #     return()
-  #   }
-
-  #   uploaded_files <- if (!is.null(input$file)) {
-  #     paste(input$file$name, collapse = ", ")
-  #   } else {
-  #     "žádné"
-  #   }
-
-  #   selected_genes <- if (!is.null(input$regions)) {
-  #     paste(input$regions, collapse = ", ")
-  #   } else {
-  #     "žádné"
-  #   }
-
-  #   email_body <- paste(
-  #     "Bylo nahlášeno chování aplikace.",
-  #     "",
-  #     paste("Čas:", Sys.time()),
-  #     paste("Nahrané soubory:", uploaded_files),
-  #     paste("Vybrané geny:", selected_genes),
-  #     "",
-  #     "Popis:",
-  #     report_text,
-  #     sep = "\n"
-  #   )
-
-  #   blastula::smtp_send(
-  #     from = Sys.getenv("APP_EMAIL_FROM"),
-  #     to = "10867@fnbrno.cz",
-  #     subject = "Chyba v aplikaci Exom Analýza cnv+filtr",
-  #     credentials = blastula::creds(
-  #       host = Sys.getenv("APP_SMTP_HOST"),
-  #       port = as.integer(Sys.getenv("APP_SMTP_PORT")),
-  #       user = Sys.getenv("APP_SMTP_USER"),
-  #       pass = Sys.getenv("APP_SMTP_PASS"),
-  #       use_ssl = TRUE
-  #     ),
-  #     body = blastula::md(email_body)
-  #   )
-
-  #   updateTextAreaInput(session, "bug_report", value = "")
-  #   showNotification("Hlášení bylo odesláno.", type = "message")
-  # }),
-
+  # error reporting
   observeEvent(input$show_bug_form, {
     showModal(
       modalDialog(
@@ -1171,37 +1132,6 @@ server <- function(input, output, session) {
 
     showNotification("Díky! Podívám se na to.", type = "message")
   })
-
-  # observeEvent(input$send_bug, {
-  #   report_text <- trimws(input$bug_report)
-
-  #   if (report_text == "") {
-  #     showNotification("Nejprve napište popis chyby.", type = "warning")
-  #     return()
-  #   }
-
-  #   email <- blastula::compose_email(
-  #     body = blastula::md(report_text)
-  #   )
-
-  #   blastula::smtp_send(
-  #     email = email,
-  #     from = Sys.getenv("APP_EMAIL_FROM"),
-  #     to = "10867@fnbrno.cz",
-  #     subject = "Chyba v aplikaci Exom Analýza cnv+filtr",
-  #     credentials = blastula::creds_user_pass(
-  #       user = Sys.getenv("APP_SMTP_USER"),
-  #       pass = Sys.getenv("APP_SMTP_PASS")
-  #     ),
-
-  #     host = Sys.getenv("APP_SMTP_HOST"),
-  #     port = as.integer(Sys.getenv("APP_SMTP_PORT")),
-  #     use_ssl = TRUE
-  #   )
-
-  #   removeModal()
-  #   showNotification("Hlášení bylo odesláno.", type = "message")
-  # })
 
 }
 
