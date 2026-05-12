@@ -23,20 +23,34 @@ normalize_coverage <- function(df) {
 }
 
 # Load OMIM reference file safely
-load_omim_file <- function(path = "../reference/omim-phenptype-2024-upr-sl67.txt") { # nolint
+# load_omim_file <- function(path = "../reference/omim-phenptype-2024-upr-sl67.txt") { # nolint
+#   if (!file.exists(path)) return(NULL)
+
+#   lines <- readLines(path, warn = FALSE, encoding = "UTF-8")
+#   parsed <- strsplit(lines, "\t")
+
+#   clean_df <- lapply(parsed, function(parts) {
+#     gene <- parts[1]
+#     phenotypes <- paste(Filter(function(x) x != "" && x != " ", parts[-1]), collapse = "; ")
+
+#     return(data.frame(gene = gene, phenotyp = phenotypes, stringsAsFactors = FALSE)) # nolint
+#   })
+
+#   df <- do.call(rbind, clean_df)
+#   df[] <- lapply(df, trimws)
+#   return(df)
+# }
+
+load_omim_file <- function(path = "../reference/gen-phenotyp2-uniq.txt") { #nolint
   if (!file.exists(path)) return(NULL)
-
-  lines <- readLines(path, warn = FALSE, encoding = "UTF-8")
-  parsed <- strsplit(lines, "\t")
-
-  clean_df <- lapply(parsed, function(parts) {
-    gene <- parts[1]
-    phenotypes <- paste(Filter(function(x) x != "" && x != " ", parts[-1]), collapse = "; ")
-
-    return(data.frame(gene = gene, phenotyp = phenotypes, stringsAsFactors = FALSE)) # nolint
+  df <- tryCatch({
+    read.table(path, header = TRUE, sep = "\t", stringsAsFactors = FALSE,
+              fill = TRUE, colClasses = c("character", "character"))
+  }, error = function(e) {
+    showNotification("Chyba při načítání OMIM souboru.", type = "error")
+    return(NULL)
   })
 
-  df <- do.call(rbind, clean_df)
   df[] <- lapply(df, trimws)
   return(df)
 }
@@ -48,15 +62,16 @@ annotate_with_omim <- function(result_df, omim_df) {
     return(result_df)
   }
 
+  # Convert to uppercase and trim whitespace for matching
   query_genes <- toupper(trimws(result_df$name))
   ref_genes <- toupper(trimws(omim_df$gene))
 
+  # Use match to find corresponding phenotypes
   match_idx <- match(query_genes, ref_genes)
   result_df$OMIM <- ifelse(!is.na(match_idx), omim_df$phenotyp[match_idx], "NA")
 
-  # ✨ Odstranit prázdné části oddělené středníky
-  result_df$OMIM <- gsub("(;\\s*)+$", "", result_df$OMIM)  # odstraňuje konečné ; ; ; ; ;
-  result_df$OMIM <- gsub("\\s*;\\s*;", ";", result_df$OMIM)  # slučuje dvojité ;; mezi hodnotami
-
+  # remove trailing semicolons and extra spaces
+  result_df$OMIM <- gsub("(;\\s*)+$", "", result_df$OMIM)
+  result_df$OMIM <- gsub("\\s*;\\s*;", ";", result_df$OMIM)
   return(result_df)
 }

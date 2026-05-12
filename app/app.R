@@ -137,6 +137,13 @@ ui <- page_sidebar(
         overflow: visible;
         margin-bottom: 10px;
       }
+      .panel_karta {
+        height: 300px;
+        overflow: auto;
+        box-shadow: 0 0.085rem 0.20rem rgba(0, 0, 0, 0.150);
+        border-radius: 0.5rem;
+        background-color: white;
+      }
       .panel-card {
         height: 300px;
         overflow: auto;   /* aby scrollovala */
@@ -219,8 +226,13 @@ ui <- page_sidebar(
         overflow: auto;
         box-shadow: 0 0.085rem 0.20rem rgba(0, 0, 0, 0.150);
         border-radius: 0.5rem;
-        padding: 1rem;
+        padding: 1.25rem;
         background-color: white;
+        resize: vertical;
+      }
+      .info-gender-card-small {
+        height: 150px;
+        overflow: auto;
       }
       .submit-task-button {
         text-align: left; 
@@ -364,49 +376,81 @@ ui <- page_sidebar(
     uiOutput("info_panel")
   ),
 
-  div(
-    class = "panel-card",
-    uiOutput("panel_karta")
-  ),
+  # div(
+  #   class = "panel-card",
+  #   uiOutput("panel_karta")
+  # ),
+  uiOutput("panel_karta"),
   # div(class = "resize-handle"),
 
   # div(
   #   class = "card-container",
   #   card(
   #     class = "resizable-card",
-  navset_card_tab(
-    nav_panel("Coverage  Mean ALL", DT::dataTableOutput("coverage_table")), # nolint
-    nav_panel("CNV Muži Mean", DT::dataTableOutput("cnv_m")), # nolint
-    nav_panel("CNV Ženy Mean", DT::dataTableOutput("cnv_z")), # nolint
-    nav_spacer(),
-    nav_item(align = c("right"), input_switch("switch_on", label = "Filtr", value = FALSE, width = NULL)) # nolint
-    # nav_panel()
-    #nav_panel("Coverage Procenta ALL", DT::dataTableOutput("coverage_table_proc")), # nolint
-    #nav_panel("CNV Muži Procenta", DT::dataTableOutput("cnv_m_proc")), # nolint
-    #nav_panel("CNV Ženy Procenta", DT::dataTableOutput("cnv_z_proc")) # nolint
-  )
+  # navset_card_tab(
+  #   nav_panel("Coverage  Mean ALL", DT::dataTableOutput("coverage_table")), # nolint
+  #   nav_panel("CNV Muži Mean", DT::dataTableOutput("cnv_m")), # nolint
+  #   nav_panel("CNV Ženy Mean", DT::dataTableOutput("cnv_z")), # nolint
+  #   nav_spacer(),
+  #   nav_item(align = c("right"), input_switch("switch_on", label = "Filtr", value = FALSE, width = NULL)) # nolint
+  #   # nav_panel()
+  #   #nav_panel("Coverage Procenta ALL", DT::dataTableOutput("coverage_table_proc")), # nolint
+  #   #nav_panel("CNV Muži Procenta", DT::dataTableOutput("cnv_m_proc")), # nolint
+  #   #nav_panel("CNV Ženy Procenta", DT::dataTableOutput("cnv_z_proc")) # nolint
+  # )
   #   )
   # ),
   # div(class = "resize-handle")
+
+  uiOutput("results_panel"),
 )
 
 ######################################################################################################################## # nolint
 
 # Server logic
 server <- function(input, output, session) {
+
+  # Reactive values to store data and processing status
+  final_data <- reactiveVal()
+  # final_data_proc <- reactiveVal()
+  final_data_original <- reactiveVal()
+  pohlavi_data <- reactiveVal()
+  cnv_m_data <- reactiveVal()
+  cnv_m_data_original <- reactiveVal()
+  cnv_z_data <- reactiveVal()
+  cnv_z_data_original <- reactiveVal()
+  # cnv_m_data_proc <- reactiveVal()
+  # cnv_z_data_proc <- reactiveVal()
+  submit_status <- reactiveVal("ready")
+  regions_data <- reactiveVal(NULL)
+  filtered_data <- reactiveVal()
+  filtered_cnv_m <- reactiveVal()
+  filtered_cnv_z <- reactiveVal()
+
   output$info_panel <- renderUI({
     if (is.null(input$file)) {
       card(
         tags$div(
           class = "text-left",
-          style = "margin-bottom: 50px;",
-          tags$p("Nejprve nahrajte soubory s příponou 'coveragefin.txt'."), # nolint
-          tags$p("Po té zvolte pohlaví a potvrďte tlačítkem Zpracovat. "), # nolint
-          tags$p("Po zpracování se zobrazí výsledky v jednotlivých záložkách."), # nolint
-          tags$p("V případě problémů s nahráváním souborů zkontrolujte, zda jsou ve správném formátu a nepřesahují velikost 30 MB."), # nolint
-          tags$p("Pro vyfiltrování požadovaných genů vyplňte pole pro filtr na bočním panelu a klikněte na 'Použít filtr'. Tlačítkem Obnovit vše filtr smažete a vrátíte tabullky do původního stavu. V poli pro filtr se automaticky nabízejí geny ze sloupce 'name' z nahraných souborů. "), # nolint
-          tags$p("Něco nefunguje?"),
-          actionButton("show_bug_form", "Nahlásit chybu"),
+          style = "margin-bottom: 50px; padding: 20px;",
+          tags$p(
+            tags$li("Nejprve nahrajte soubory s příponou", tags$b("'coveragefin.txt'"), "."), # nolint
+            tags$li("Po té zvolte pohlaví a potvrďte tlačítkem", tags$b("Zpracovat"), "."), # nolint
+            tags$li("Po zpracování se zobrazí výsledky v jednotlivých záložkách."), # nolint
+            tags$li("V případě problémů s nahráváním souborů zkontrolujte, zda jsou ve správném formátu a nepřesahují", tags$b("velikost 30 MB"), "."), # nolint
+            tags$li("Pro vyfiltrování požadovaných genů vyplňte pole pro filtr na bočním panelu a klikněte na", tags$b("Použít filtr"), ".", tags$br(),
+                    "Tlačítkem", tags$b("Obnovit vše"), "filtr smažete a vrátíte tabulky do původního stavu.", tags$br(),
+                    "V poli pro filtr se automaticky nabízejí geny ze sloupce", tags$b("'name'"), " z nahraných souborů.", tags$br(),
+                    "Pokud chcete přidat geny do již vyfiltrovaných tabulek, je potřeba nejprve vše obnovit a pak znovu zadat všechny geny, které chcete vyfiltrovat.", tags$br(),
+                    "Geny lze vkládat i pomocí", tags$b("Ctrl+V"), "."
+            )
+          ),
+          tags$br(),
+          tags$p("12.5. aktualizovaný omim soubor."),
+          tags$br(),
+          tags$p("Něco nefunguje?",
+            actionButton("show_bug_form", "Nahlásit chybu", style = "background-color: #C21E56; color: white; border: none; border-radius: 4px; font-size: 16px; padding: 6px; margin-left: 10px;"),
+          ),
         )
       )
     } else {
@@ -419,9 +463,23 @@ server <- function(input, output, session) {
     gsub(".coveragefin\\.txt$", "", input$file$name)
   })
 
+  # output$panel_karta <- renderUI({
+  #   req(input$file)
+  #   div(class = "info-gender-card",
+  #     tags$h5("Zadejte pohlaví pro každý vzorek:"), # nolint
+  #     uiOutput("gender_input"),
+  #     uiOutput("action_button")
+  #   )
+  # })
+
   output$panel_karta <- renderUI({
     req(input$file)
-    div(class = "info-gender-card",
+    div(
+      class = if (!is.null(final_data()) && nrow(final_data()) > 0) {
+        "info-gender-card info-gender-card-small"
+      } else {
+        "info-gender-card"
+      },
       tags$h5("Zadejte pohlaví pro každý vzorek:"), # nolint
       uiOutput("gender_input"),
       uiOutput("action_button")
@@ -445,23 +503,6 @@ server <- function(input, output, session) {
       )
     })
   })
-
-  # Reactive values to store data and processing status
-  final_data <- reactiveVal()
-  # final_data_proc <- reactiveVal()
-  final_data_original <- reactiveVal()
-  pohlavi_data <- reactiveVal()
-  cnv_m_data <- reactiveVal()
-  cnv_m_data_original <- reactiveVal()
-  cnv_z_data <- reactiveVal()
-  cnv_z_data_original <- reactiveVal()
-  # cnv_m_data_proc <- reactiveVal()
-  # cnv_z_data_proc <- reactiveVal()
-  submit_status <- reactiveVal("ready")
-  regions_data <- reactiveVal(NULL)
-  filtered_data <- reactiveVal()
-  filtered_cnv_m <- reactiveVal()
-  filtered_cnv_z <- reactiveVal()
 
   regions <- reactive({
     selected_regions <- Filter(function(x) x != "", input$regions)
@@ -753,6 +794,16 @@ server <- function(input, output, session) {
     # final_data, final_data_original
     # cnv_z_data, cnv_z_data_original
     # cnv_m_data, cnv_m_data_original
+  })
+
+  output$results_panel <- renderUI({
+    req(!is.null(final_data()))
+
+    navset_card_tab(
+      nav_panel("Coverage Mean ALL", DT::dataTableOutput("coverage_table")),
+      nav_panel("CNV Muži Mean", DT::dataTableOutput("cnv_m")),
+      nav_panel("CNV Ženy Mean", DT::dataTableOutput("cnv_z"))
+    )
   })
 
   # FILTER
