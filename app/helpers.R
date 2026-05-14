@@ -43,13 +43,38 @@ normalize_coverage <- function(df) {
 
 load_omim_file <- function(path = "../reference/gen-phenotyp2-uniq.txt") { #nolint
   if (!file.exists(path)) return(NULL)
-  df <- tryCatch({
-    read.table(path, header = TRUE, sep = "\t", stringsAsFactors = FALSE,
-              fill = TRUE, colClasses = c("character", "character"))
-  }, error = function(e) {
-    showNotification("Chyba při načítání OMIM souboru.", type = "error")
-    return(NULL)
-  })
+  # df <- tryCatch({
+  #   read.table(path, header = TRUE, sep = "\t", stringsAsFactors = FALSE,
+  #             fill = TRUE, colClasses = c("character", "character"))
+  # }, error = function(e) {
+  df <- read.delim(
+    path,
+    header = TRUE,
+    sep = "\t",
+    stringsAsFactors = FALSE,
+    quote = "",
+    comment.char = "",
+    check.names = FALSE,
+    fileEncoding = "UTF-8"
+  # }, error = function(e) {
+  #   showNotification("Chyba při načítání OMIM souboru.", type = "error")
+  #   return(NULL)
+  # })
+  )
+
+  # cat("pocet radku OMIM:", nrow(df), "\n")
+  # cat("DVL1 v readLines:", any(grepl("^DVL1\\t", readLines(path))), "\n")
+  # cat("DVL1 v df$gene:", any(df$gene == "DVL1"), "\n")
+  # print(df[grep("DVL1", df$gene), ])
+
+  # cat("OMIM path used by Shiny:\n")
+  # print(normalizePath(path, mustWork = FALSE))
+
+  # cat("getwd():\n")
+  # print(getwd())
+
+  # cat("DVL1 grep after loading:\n")
+  # print(grep("DVL1", df$gene, value = TRUE))
 
   df[] <- lapply(df, trimws)
   return(df)
@@ -65,6 +90,15 @@ annotate_with_omim <- function(result_df, omim_df) {
   # Convert to uppercase and trim whitespace for matching
   query_genes <- toupper(trimws(result_df$name))
   ref_genes <- toupper(trimws(omim_df$gene))
+
+
+  # cat("TEST DVL1\n")
+  # cat("result:", dput(unique(result_df$name[grepl("DVL1", result_df$name)])), "\n")
+  # cat("omim:", dput(unique(omim_df$gene[grepl("DVL1", omim_df$gene)])), "\n")
+
+  # cat("match DVL1:", match("DVL1", toupper(trimws(omim_df$gene))), "\n")
+  # cat("phenotyp DVL1:", omim_df$phenotyp[match("DVL1", toupper(trimws(omim_df$gene)))], "\n")
+
 
   # Use match to find corresponding phenotypes
   match_idx <- match(query_genes, ref_genes)
